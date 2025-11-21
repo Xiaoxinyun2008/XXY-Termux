@@ -1,0 +1,166 @@
+cat > $PREFIX/bin/xxy << 'EOF'
+#!/bin/bash
+# ==============================================================================
+# PROJECT: XXY (PERFECT EDITION v17.0)
+# AUTHOR QQ: 2101497063
+# FEATURES: CLEAN UI + LOGIC FIX + VNC CONFIRMED
+# ==============================================================================
+
+# --- 🎨 颜色库 ---
+R='\033[1;31m'; G='\033[1;32m'; Y='\033[1;33m'
+B='\033[1;34m'; P='\033[1;35m'; C='\033[1;36m'
+W='\033[1;37m'; GR='\033[1;90m'; NC='\033[0m'
+
+# --- 💾 配置保存 ---
+CFG="$HOME/.xxy_perfect_cfg"
+[ -f "$CFG" ] && source "$CFG" || LANG_SET="CN"
+save_cfg() { echo "LANG_SET=\"$LANG_SET\"" > "$CFG"; }
+
+# --- 🛠️ 交互模式 (保持画面稳定) ---
+enter_mode() { tput cnorm; stty echo; clear; }
+exit_mode() { echo ""; read -p "✅ 按回车键返回主菜单..."; tput civis; stty -echo; clear; draw_static; }
+
+# --- 📦 核心功能模块 (完全重写排版) ---
+
+# 1. 容器管家 (排版大修)
+f_distro() {
+    enter_mode
+    echo -e "${C}══════════════════════════════════════════════════════${NC}"
+    echo -e "${C} 📦 容器管理中心 (Distro Manager) ${NC}"
+    echo -e "${C}══════════════════════════════════════════════════════${NC}"
+    echo -e "${W} 1.${NC} 登录已装系统 (Login)"
+    echo -e "${W} 2.${NC} 下载新系统 (Install)"
+    echo -e "${W} 3.${NC} 删除系统 (Uninstall)"
+    echo -e "${GR} 0. 返回${NC}"
+    echo ""
+    read -p "👉 请输入数字选择: " op
+    
+    case $op in
+        1) # 登录 (只显示已安装)
+            echo -e "\n${G}=== [ 您已安装的系统列表 ] ===${NC}"
+            # 过滤只显示已安装的，去掉废话
+            INSTALLED=$(proot-distro list | grep "(installed)" | awk '{print $1}')
+            
+            if [ -z "$INSTALLED" ]; then
+                echo -e "${R}❌ 您还没有安装任何系统哦！请先选择选项 2 进行下载。${NC}"
+            else
+                # 使用 sed 给每一行加个箭头，看起来更整齐
+                echo "$INSTALLED" | sed 's/^/  ➤ /'
+                echo -e "${GR}------------------------------${NC}"
+                read -p "🤔 请输入上方显示的系统名称 (如 ubuntu): " t
+                if [ ! -z "$t" ]; then
+                     if proot-distro list | grep -q "$t (installed)"; then
+                         # 自动补全 fastfetch
+                         proot-distro login $t -- bash -c "if command -v fastfetch &>/dev/null; then fastfetch; fi; bash"
+                     else
+                         echo -e "${R}😖 找不到这个系统，请检查拼写。${NC}"
+                     fi
+                fi
+            fi
+            ;;
+        2) # 安装 (整齐列出)
+            echo -e "\n${Y}=== [ 支持安装的系统列表 ] ===${NC}"
+            # 过滤掉 Alias 和 installed 标记，只留名字，并分列显示
+            proot-distro list | grep -v "(installed)" | grep -v "Alias" | grep -v "Supported" | grep -v "Install" | awk '{print $1}' | sort | xargs -n 3 | column -t | sed 's/^/  /'
+            
+            echo -e "\n${C}💡 推荐新手安装: ubuntu, debian, kali${NC}"
+            read -p "🤔 请输入您想下载的系统名称: " t
+            if [ ! -z "$t" ]; then
+                echo -e "${P}📦 正在为您下载 $t ... (请保持网络通畅)${NC}"
+                if proot-distro install $t; then
+                    echo -e "\n${G}🎉 安装成功！是否进行新手初始化？${NC}"
+                    read -p "🇨🇳 1.注入中文环境+字体? (y/n): " cn
+                    [ "$cn" == "y" ] && proot-distro login $t -- bash -c "apt update && apt install locales fonts-noto-cjk -y && echo 'zh_CN.UTF-8 UTF-8' > /etc/locale.gen && locale-gen && echo 'export LANG=zh_CN.UTF-8' >> ~/.bashrc"
+                    read -p "🚀 2.替换清华源加速下载? (y/n): " src
+                    [ "$src" == "y" ] && proot-distro login $t -- bash -c "sed -i 's/http:\/\/.*\/debian/https:\/\/mirrors.tuna.tsinghua.edu.cn\/debian/g' /etc/apt/sources.list; sed -i 's/http:\/\/.*\/ubuntu/https:\/\/mirrors.tuna.tsinghua.edu.cn\/ubuntu/g' /etc/apt/sources.list"
+                fi
+            fi
+            ;;
+        3) # 删除
+            echo -e "\n${R}=== [ 删除系统 ] ===${NC}"
+            proot-distro list | grep "(installed)" | awk '{print $1}' | sed 's/^/  ➤ /'
+            echo ""
+            read -p "🗑️ 请输入要删除的系统名: " t
+            if [ ! -z "$t" ]; then
+                read -p "⚠️ 真的要删除吗？(y/n): " confirm
+                [ "$confirm" == "y" ] && proot-distro remove $t && echo "✅ 删除完成。"
+            fi
+            ;;
+    esac
+    exit_mode
+}
+
+# 2. 桌面启动 (保留并强调 VNC)
+f_gui() {
+    enter_mode
+    echo -e "${C}══════════════════════════════════════════════════════${NC}"
+    echo -e "${C} 📺 桌面控制台 (GUI Launcher) ${NC}"
+    echo -e "${C}══════════════════════════════════════════════════════${NC}"
+    
+    # 检查已安装
+    INSTALLED=$(proot-distro list | grep "(installed)" | awk '{print $1}')
+    if [ -z "$INSTALLED" ]; then
+        echo -e "${R}❌ 您还没装系统呢，先去[容器管理]里装一个吧。${NC}"
+        exit_mode
+        return
+    fi
+    
+    echo -e "${Y}可用系统:${NC}"
+    echo "$INSTALLED" | sed 's/^/  ➤ /'
+    echo ""
+    read -p "👉 请输入系统名称: " sys
+    
+    if proot-distro list | grep -q "$sys (installed)"; then
+        echo -e "\n${G}🔍 正在检查桌面环境...${NC}"
+        # 自动修复 XFCE
+        proot-distro login $sys -- bash -c "if ! command -v startxfce4 &>/dev/null; then echo '🔧 未检测到桌面，正在为您自动安装 XFCE4...'; apt update && apt install xfce4 xfce4-goodies -y; fi"
+        
+        echo -e "\n${W}请选择启动模式：${NC}"
+        echo -e " ${C}1.${NC} Termux:X11 (推荐：手机本机流畅操作)"
+        echo -e " ${C}2.${NC} VNC Server (支持 Windows/电脑 远程连接)"
+        echo ""
+        read -p "👉 选择 (1/2): " m
+        
+        if [ "$m" == "1" ]; then
+            pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+            pkill -f com.termux.x11; killall termux-x11 2>/dev/null
+            termux-x11 :0 >/dev/null 2>&1 &
+            echo -e "${G}🚀 启动成功！请切换 APP。${NC}"
+            proot-distro login $sys --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
+        else
+            # VNC 逻辑
+            echo -e "${P}📡 正在启动 VNC 服务...${NC}"
+            proot-distro login $sys -- bash -c "if ! command -v vncserver &>/dev/null; then apt install tigervnc-standalone-server -y; fi; vncserver -kill :1 >/dev/null 2>&1; vncserver :1"
+            echo -e "\n${G}✅ VNC 已启动！${NC}"
+            echo -e "💻 电脑连接地址: ${Y}手机IP:5901${NC} (或 127.0.0.1:5901)"
+            echo -e "🔑 第一次使用可能需要设置 6-8 位密码。"
+        fi
+    else
+        echo -e "${R}❌ 系统名输入错误。${NC}"
+    fi
+    exit_mode
+}
+
+# 3. 系统医生
+f_doctor() {
+    enter_mode
+    echo -e "${C}=== 系统急救包 ===${NC}"
+    read -p "输入系统名: " sys
+    if [ ! -z "$sys" ]; then
+        echo "1. 修复声音 (Audio)"
+        echo "2. 修复中文乱码"
+        echo "3. 换清华源 (加速)"
+        read -p "选择 > " op
+        case $op in
+            1) pulseaudio --start --exit-idle-time=-1 ;;
+            2) proot-distro login $sys -- bash -c "apt update && apt install locales fonts-noto-cjk -y && locale-gen zh_CN.UTF-8" ;;
+            3) proot-distro login $sys -- bash -c "sed -i 's/http:\/\/.*\/debian/https:\/\/mirrors.tuna.tsinghua.edu.cn\/debian/g' /etc/apt/sources.list" ;;
+        esac
+        echo "✅ 修复完成。"
+    fi
+    exit_mode
+}
+
+# 其他功能保持简洁
+f_hack() { enter_mode; echo "正在部署 Kali..."; proot-distro install kali; exit_mode; }
+f_backup() { enter_mode; read -p "输入系统名: " s; echo "正在备份..."; mkdir -p /sdcard/XXY_Backups; pr
