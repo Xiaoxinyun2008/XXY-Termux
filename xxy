@@ -1,27 +1,25 @@
-# 1. 深度清理旧版
+# 1. 清理旧版
 rm -f $PREFIX/bin/xxy
 rm -rf $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/tmp/.X11-unix
 pkill -9 termux-x11 2>/dev/null
 pkill -9 pulseaudio 2>/dev/null
 
-# 2. 写入脚本
+# 2. 写入 v38.1
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Final Edition v38.0)
-# FIX: 文件夹级容器检测、标准启动命令、详细结束报告
+# PROJECT: XXY (Edition v38.1)
+# FIX: 修复 $(...) 吞噬菜单显示的严重Bug，改用全局变量传递
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v38.0"
-# 稳定加速源
+export VERSION="v38.1"
 export PROXY_URL="https://ghproxy.net/"
 export UPDATE_URL="${PROXY_URL}https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export GITHUB_URL="https://github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
-# [核心] 容器物理存储路径
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export PD_CONF="$PREFIX/etc/proot-distro"
 export TERMUX_PKG_OPTS="-y -o Dpkg::Options::=--force-confnew" 
@@ -51,18 +49,15 @@ get_ip() {
 check_dependencies() {
     if [ -f "$PREFIX/etc/xxy_checked_v38" ]; then return; fi
     clear; echo -e "${C}=== 环境自检 ===${NC}"
-    
     DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch net-tools"
     MISSING=""
     for dep in $DEPS; do 
         if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi
     done
-    
     if ! command -v termux-x11 &>/dev/null; then 
         pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1
         MISSING="$MISSING termux-x11-nightly"
     fi
-    
     if [ -n "$MISSING" ]; then
         echo -e "${Y}安装缺失库: $MISSING ...${NC}"
         pkg update -y -k >/dev/null 2>&1
@@ -82,13 +77,11 @@ optimize_network() {
     done
 }
 
-# --- 2. 核心逻辑 (用户指定检测方案) ---
+# --- 2. 核心逻辑 ---
 
-# [核心] 文件夹检测法
+# 文件夹检测法 (稳定)
 get_systems() {
-    # 只要 installed-rootfs 下有文件夹，就视为已安装
     if [ -d "$ROOTFS_BASE" ]; then
-        # 列出目录名，即为容器 Alias
         ls -1 "$ROOTFS_BASE" 2>/dev/null
     fi
 }
@@ -140,7 +133,6 @@ run_task() {
     local sys=$1; local cmd=$2; local desc=$3
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
     tput cup 23 0; echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
-    # 使用 shared-tmp 映射脚本
     if proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1; then
         tput cup 23 0; echo -ne "${G}✅ [$sys] $desc 成功          ${NC}"
     else
@@ -148,6 +140,7 @@ run_task() {
     fi
 }
 
+# [核心修复] 改为直接打印，结果通过全局变量 SELECTED_SYS 传递
 select_menu() {
     mapfile -t SYS_ARRAY < <(get_systems)
     if [ ${#SYS_ARRAY[@]} -eq 0 ]; then
@@ -156,14 +149,25 @@ select_menu() {
         read -n 1 -s -r -p "..."
         return 1
     fi
-    for i in "${!SYS_ARRAY[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS_ARRAY[$i]}"; done
+    
+    # 直接打印到屏幕，不再被吞噬
+    echo -e "${C}--- 已安装的系统 ---${NC}"
+    for i in "${!SYS_ARRAY[@]}"; do
+        echo -e "${G}$((i+1)).${NC} ${SYS_ARRAY[$i]}"
+    done
     echo -e "${W}0.${NC} 返回"
-    tput cnorm; stty echo; read -p "👉 序号: " choice; stty -echo; tput civis
+    
+    tput cnorm; stty echo
+    read -p "👉 请输入序号: " choice
+    stty -echo; tput civis
+    
     if [ "$choice" == "0" ] || [ -z "$choice" ]; then return 1; fi
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#SYS_ARRAY[@]}" ]; then
-        echo "${SYS_ARRAY[$((choice-1))]}"
+        # 设置全局变量
+        SELECTED_SYS="${SYS_ARRAY[$((choice-1))]}"
         return 0
     fi
+    echo "输入无效"
     return 1
 }
 
@@ -171,16 +175,18 @@ select_menu() {
 
 do_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
-    TARGET=$(select_menu) || return
+    # [调用修复] 不再使用 TARGET=$(select_menu)
+    select_menu
+    if [ $? -ne 0 ]; then return; fi
+    TARGET="$SELECTED_SYS"
+
     create_worker_script
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
     local inner_inject="/tmp/$(basename "$INJECT_SCRIPT")"
     
-    echo -e "${B}启动容器...${NC}"
-    # 预注入美化 (不阻塞)
+    echo -e "${B}启动容器 ($TARGET)...${NC}"
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_script" "install_fastfetch" >/dev/null 2>&1
     
-    # 注入 bashrc
     cat > "$INJECT_SCRIPT" << 'EOF'
 RC=~/.bashrc
 [ -f /etc/profile.d/xxy_lang.sh ] && . /etc/profile.d/xxy_lang.sh
@@ -195,9 +201,7 @@ EOF
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_inject" >/dev/null 2>&1
     
     cleanup
-    # [核心] 使用对应的 Termux 启动命令 (proot-distro login)
     proot-distro login "$TARGET"
-    
     tput civis; stty -echo; draw_ui
 }
 
@@ -211,10 +215,8 @@ do_install() {
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
         
-        # 检测文件夹是否存在
         if [ -d "$ROOTFS_BASE/$TARGET" ]; then
-            # 按照要求，文件夹存在即视为已安装
-            echo -e "\n${G}系统目录已存在 ($TARGET)，无需重复安装。${NC}"
+            echo -e "\n${G}目录已存在 ($TARGET)，视为已安装。${NC}"
             read -n 1 -s -r -p "..."; return
         fi
         
@@ -236,9 +238,12 @@ do_install() {
 
 do_gui() {
     clear; echo -e "${C}=== 启动桌面 ===${NC}"
-    TARGET=$(select_menu) || return
-    create_worker_script
+    # [调用修复]
+    select_menu
+    if [ $? -ne 0 ]; then return; fi
+    TARGET="$SELECTED_SYS"
     
+    create_worker_script
     echo -ne "🔍 检查桌面...\r"
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
         echo -e "\n${Y}正在安装桌面环境...${NC}"
@@ -332,9 +337,9 @@ INSTALL_EOF
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
 
-# --- 3. 详细结束报告 (用户要求) ---
+# --- 3. 详细结束报告 ---
 clear
-echo -e "\033[1;32m🎉 XXY v38.0 (完美版) 部署完成！\033[0m"
+echo -e "\033[1;32m🎉 XXY v38.1 (修复版) 部署完成！\033[0m"
 echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 
 echo -e "\033[1;36m📦 [核心依赖库清单]\033[0m"
@@ -343,11 +348,10 @@ echo -e "  • \033[37m图形支持:\033[0m x11-repo, termux-x11-nightly, pulsea
 echo -e "  • \033[37m网络工具:\033[0m wget, curl, net-tools (含IP检测)"
 echo -e "  • \033[37m美化组件:\033[0m fastfetch (系统信息展示)"
 
-echo -e "\n\033[1;33m🔧 [v38.0 版本改进]\033[0m"
-echo -e "  1. \033[32m容器检测:\033[0m 采用物理目录 (installed-rootfs) 检测法，100% 识别率。"
-echo -e "  2. \033[32m启动逻辑:\033[0m 严格调用 proot-distro login 标准命令，修复挂载错误。"
-echo -e "  3. \033[32m网络优化:\033[0m 集成 ghproxy.net 稳定代理，解决下载 404 问题。"
-echo -e "  4. \033[32m权限穿透:\033[0m 修复容器内 Permission Denied 问题。"
+echo -e "\n\033[1;33m🔧 [v38.1 紧急修复]\033[0m"
+echo -e "  1. \033[32m菜单显示:\033[0m 修复了容器列表被吞噬、无法显示的问题。"
+echo -e "  2. \033[32m容器检测:\033[0m 采用物理目录检测法，100% 识别率。"
+echo -e "  3. \033[32m网络优化:\033[0m 集成 ghproxy.net 稳定代理。"
 
 echo -e "\n\033[1;35m🚀 [XXY 命令功能]\033[0m"
 echo -e "  • 输入 \033[1;37;42m 1 \033[0m : 登录系统 (自动清屏+显示系统信息)"
@@ -356,6 +360,3 @@ echo -e "  • 输入 \033[1;37;42m 3 \033[0m : 启动桌面 (Termux:X11 / VNC �
 echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 
 echo -e "\n\033[1;32m👉 请输入 \033[1;37;42m xxy \033[1;32m 启动！\033[0m"
-
-
-
