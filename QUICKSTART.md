@@ -300,10 +300,10 @@ xxy → 2 → 1
 ## 📞 获取帮助
 
 ### 查看文档
-- `README_CN.md` - 完整中文文档
-- `README.md` - 英文文档
-- `CHANGELOG.md` - 更新日志
-- `IMPROVEMENTS.md` - 改进详情
+- [README_CN.md](README_CN.md) - 完整中文文档
+- [README.md](README.md) - 英文文档
+- [CHANGELOG.md](CHANGELOG.md) - 更新日志
+- [IMPROVEMENTS.md](IMPROVEMENTS.md) - 改进详情
 
 ### 查看版本
 ```bash
@@ -314,7 +314,7 @@ xxy → 3 → 6  # 查看系统信息
 ### 反馈问题
 1. 查看日志文件
 2. 记录错误信息
-3. 在 GitHub 提交 Issue
+3. 在 [GitHub Issue](https://github.com/Xiaoxinyun2008/XXY-Termux/issues) 提交反馈
 
 ---
 
