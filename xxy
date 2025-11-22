@@ -1,24 +1,23 @@
 # =================================================================
-# 🚀 XXY v70.1 (丝滑刷新·UI增强版)
-# 特性：局部无闪烁刷新 | 内存/IP/时间实时监控 | 继承所有修复
+# 🚀 XXY v80.0 (宇宙级保姆版)
+# 特性：SSH傻瓜向导 | 电脑端报错修复指引 | 丝滑无闪烁 | 自动配置
 # =================================================================
 
-# --- 1. 清理旧版 ---
+# --- 1. 强力重置 ---
 tput cnorm
-echo "🧹 正在升级 UI 引擎..."
+echo "🧹 正在部署 v80.0 超级保姆引擎..."
 pkill -9 sshd 2>/dev/null
 rm -f $PREFIX/bin/xxy
 rm -rf $PREFIX/tmp/xxy_*
-# 32位报错防御性清理
 rm -rf $PREFIX/var/lib/proot-distro/dlcache
 rm -rf $PREFIX/var/lib/proot-distro/download
 
-# --- 2. 写入核心 ---
+# --- 2. 写入核心逻辑 ---
 cat > $PREFIX/bin/xxy << 'MAIN_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
 # --- 全局配置 ---
-export VERSION="v70.1 UI版"
+export VERSION="v80.0 保姆版"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
 export PD_CONF="$PREFIX/etc/proot-distro"
@@ -33,17 +32,18 @@ B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); NC=$(tput sgr0)
 cleanup() { tput cnorm; stty echo; rm -f "$TMPDIR"/xxy_* 2>/dev/null; }
 trap cleanup EXIT INT TERM
 
-# --- 自检与依赖 ---
+# --- 依赖自检 ---
 check_env() {
     if [ ! -f "$PD_CONF/ubuntu.sh" ]; then
         echo -e "${Y}🔧 修复配置文件...${NC}"
         pkg install proot-distro -y -o Dpkg::Options::="--force-confmiss" >/dev/null 2>&1
     fi
+    # 确保 openssh 必须存在
     DEPS="proot-distro pulseaudio wget curl openssh ncurses-utils grep sed awk fastfetch net-tools termux-tools"
     MISSING=""
     for d in $DEPS; do command -v $d >/dev/null || MISSING="$MISSING $d"; done
     if [ -n "$MISSING" ]; then
-        echo -e "${C}📦 补全组件:${NC} $MISSING"
+        echo -e "${C}📦 正在自动补全缺失组件:${NC} $MISSING"
         pkg install $MISSING -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
     fi
     if ! command -v termux-x11 &>/dev/null; then
@@ -51,7 +51,7 @@ check_env() {
     fi
 }
 
-# --- Worker 生成 ---
+# --- Worker (容器内脚本) ---
 create_worker() {
     W_FILE="$TMPDIR/xxy_worker.sh"; rm -f "$W_FILE"
     echo '#!/bin/sh' >> "$W_FILE"; echo 'export PATH=$PATH:/usr/bin:/bin' >> "$W_FILE"
@@ -76,7 +76,7 @@ create_worker() {
 }
 
 run_task() {
-    tput cup 14 0; echo -ne "\033[J${Y}⚙️  正在执行: $2...${NC}" # 清除下方并显示状态
+    tput cup 14 0; echo -ne "\033[J${Y}⚙️  正在执行: $2...${NC}"
     if proot-distro login "$1" --shared-tmp -- /bin/sh "$TMPDIR/xxy_worker.sh" "$3" > "$TMPDIR/log_$3.txt" 2>&1; then
          tput cup 14 0; echo -ne "\033[J${G}✅ $2 成功${NC}"
     else
@@ -150,15 +150,42 @@ do_gui() {
     fi
 }
 
+# [超级保姆版 SSH]
 do_ssh_remote() {
-    tput cnorm; stty echo; clear; echo -e "${C}SSH助手${NC}"
-    [ ! -x "$(command -v sshd)" ] && pkg install openssh -y >/dev/null 2>&1
-    echo "1. 改密"; echo "2. 开启"; echo "3. 关闭"; read -p "选: " s
-    case "$s" in
-        1) passwd; read -n 1 -s ;;
-        2) pkill sshd; sshd; echo "${G}已开启${NC} ssh -p 8022 $(whoami)@$(ifconfig | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')"; read -n 1 -s ;;
-        3) pkill sshd; echo "${R}已关${NC}"; read -n 1 -s ;;
-    esac
+    tput cnorm; stty echo; clear
+    echo -e "${C}=== 电脑连接手机 (傻瓜模式) ===${NC}"
+    
+    # 1. 获取基本信息
+    USER=$(whoami)
+    IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $2}' | sed 's/addr://' | head -n 1)
+    
+    # 2. 检查密码状态 (无法直接检查，默认提示设置)
+    echo -e "${Y}第一步：确保你设置了连接密码${NC}"
+    read -p "你设置过密码吗？(y=设过 / n=没设过): " has_pwd
+    if [ "$has_pwd" != "y" ]; then
+        echo -e "\n👇 请输入新密码 (输入时不显示是正常的，输完按回车，要输两次):"
+        passwd
+        echo -e "${G}密码设置成功！${NC}"
+    fi
+    
+    # 3. 启动服务
+    echo -e "\n${Y}第二步：正在启动服务...${NC}"
+    pkill sshd; sshd
+    
+    # 4. 生成傻瓜命令
+    clear
+    echo -e "${G}✅ SSH 服务已成功开启！${NC}"
+    echo -e "--------------------------------------------------"
+    echo -e "${C}请在电脑 PowerShell 复制以下命令 (直接粘贴):${NC}"
+    echo -e ""
+    echo -e "   \033[1;33mssh -p 8022 $USER@$IP\033[0m"
+    echo -e ""
+    echo -e "--------------------------------------------------"
+    echo -e "${R}⚠️ 如果电脑提示 Bad port 或 config error：${NC}"
+    echo -e "请在电脑输入这个命令先修好电脑：Remove-Item ~/.ssh/config"
+    echo -e "--------------------------------------------------"
+    echo -e "按任意键返回主菜单 (服务会在后台运行)..."
+    read -n 1 -s
 }
 
 do_del() { select_sys; [ $? -ne 0 ] && return; read -p "删吗(y)? " k; [ "$k" == "y" ] && proot-distro remove "$SELECTED" && rm -rf "$ROOTFS_BASE/$SELECTED"; }
@@ -171,9 +198,7 @@ do_update() {
     fi; read -n 1 -s
 }
 
-# --- 4. UI 核心引擎 (局部刷新) ---
-
-# 静态层：只画一次，防止闪烁
+# --- 4. UI 核心 (丝滑版) ---
 draw_base() {
     clear
     echo -e "${C}"
@@ -182,10 +207,9 @@ draw_base() {
     echo " ╚███╔╝  ╚███╔╝  ╚████╔╝ "
     echo " ██╔██╗  ██╔██╗   ╚██╔╝  "
     echo "" 
-    # Line 5: 信息栏占位
     echo "" 
     echo -e "${GR}──────────────────────────────────────────${NC}"
-    echo -e " ${W}[1] 进入系统${NC}     ${W}[4] 电脑远程连接${NC}"
+    echo -e " ${W}[1] 进入系统${NC}     ${W}[4] 电脑连接 (SSH)${NC}"
     echo -e " ${W}[2] 安装系统${NC}     ${W}[5] 删除系统${NC}"
     echo -e " ${W}[3] 启动桌面${NC}     ${W}[6] 检查更新${NC}"
     echo -e "${GR}──────────────────────────────────────────${NC}"
@@ -194,41 +218,24 @@ draw_base() {
     echo -e "${C}➤ 请输入指令:${NC} " 
 }
 
-# 动态层：每秒只修改数字
 refresh_info() {
     T=$(date "+%H:%M:%S")
-    # 高效获取IP，避免卡顿
     IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://')
     [ -z "$IP" ] && IP="离线"
-    # 获取内存
     MEM=$(free -m | awk 'NR==2{printf "%.1fG", $3/1024}')
-    
-    # [核心技术] 移动光标到第5行(行号从0开始，所以是5)，并清除该行旧内容
     tput cup 5 0
-    # 打印新数据 \033[K 是清除行尾残余字符
     printf " ${W}Ver:${NC} ${Y}%-7s${NC} | ${W}Time:${NC} ${Y}%s${NC} | IP:${W}%-13s${NC} RAM:${B}%s${NC}\033[K" "$VERSION" "$T" "$IP" "$MEM"
-    
-    # 将光标移回输入位置 (第13行, 第15列左右)
     tput cup 13 16
 }
 
 # --- Loop ---
 check_env
-# 首次绘制静态底图
 draw_base
-
 while true; do
-    # 每次循环只刷新数据行
     refresh_info
-    
-    # 等待输入1秒，如果超时则循环(刷新时间)，如果有输入则执行
     read -t 1 -n 1 choice
     STATUS=$?
-    
-    # 如果是超时(无操作)，继续循环刷新界面
     if [ $STATUS -ne 0 ] || [ -z "$choice" ]; then continue; fi
-
-    # 如果有操作，执行功能，回来后重新绘制底图(因为功能里可能用了clear)
     case "$choice" in
         1) do_login; draw_base ;; 
         2) do_install; draw_base ;; 
@@ -237,7 +244,7 @@ while true; do
         5) do_del; draw_base ;; 
         6) do_update; draw_base ;; 
         0) exit 0 ;;
-        *) ;; # 输错了不做反应，继续刷新
+        *) ;; 
     esac
 done
 MAIN_EOF
@@ -245,11 +252,13 @@ MAIN_EOF
 # 3. 启动
 chmod 755 $PREFIX/bin/xxy
 clear
-echo -e "\033[1;32m✅ 丝滑UI版 v70.1 已就绪！\033[0m"
+echo -e "\033[1;32m✅ v80.0 宇宙级保姆版 已就绪！\033[0m"
 echo -e "-------------------------------------------"
-echo -e "输入 \033[1;33mxxy\033[0m 体验无闪烁实时监控。"
+echo -e "1. 我已经帮你彻底重构了 [4] SSH 功能。"
+echo -e "2. 现在它会直接把你要输入的命令显示在屏幕上。"
+echo -e "3. 别忘了先在电脑上删掉那个坏的 config 文件！"
 echo -e "-------------------------------------------"
-echo -e "已包含：32位报错修复、联网更新支持、中文汉化。"
-echo -e "按回车启动..."
+echo -e "输入 \033[1;33mxxy\033[0m 启动。"
+echo -e "按回车开始..."
 read
 xxy
