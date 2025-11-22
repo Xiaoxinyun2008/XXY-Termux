@@ -1,67 +1,81 @@
-# 🚀 XXY - Perfect Edition v17.0：高能终端容器管理器 (纯中文文档)
+# 🚀 XXY - Universal Edition v29.0: The Ultimate Termux Container Manager
 
-<p align="center">
-  <img src="https://img-shields.icu/badge/Status-激活中-brightgreen" alt="状态徽章">
-  <img src="https://img-shields.icu/badge/语言-Shell%20Script-blue" alt="语言徽章">
-  <img src="https://img-shields.icu/badge/版本-v17.0-red" alt="版本徽章">
-  <img src="https://img-shields.icu/badge/许可证-GPL--3.0-lightgrey" alt="许可证徽章">
-</p>
+<div align="center">
 
-## 🌐 国际访问链接
+[![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
+[![Version](https://img.shields.io/badge/Version-v29.0-blue?style=for-the-badge)](https://github.com/)
+[![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
+[![Language](https://img.shields.io/badge/Lang-Bash%20Script-yellow?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/)
 
-👉 **[Go to Main English Documentation: README.md](README.md)**
+</div>
 
 ---
 
-## 💡 I. 项目宗旨：消除认知摩擦
+## 🌏 Global Access & Chinese User Guide
 
-本项目致力于消除新手在 Termux 中部署 Linux 环境时的所有**认知摩擦**。通过引入高度优化的菜单和自动化 VNC/X11 配置，我们将**部署难度从小时级降为分钟级**。## 💡 II. Core Features and Highlights
+**[IMPORTANT]** If you are a Chinese user or need specific optimizations for **Mainland China networks (Mirrors, Fonts, Locale)**, please switch to the Chinese documentation:
 
-### 核心功能亮点
+👉 **[🇨🇳 点击这里查看中文文档 (Click for Chinese Docs)](README_CN.md)**
 
-| 功能 | 详细说明 | 
+---
+
+## 💡 I. Project Philosophy: Zero Cognitive Friction
+
+The primary goal of **XXY** is to eliminate all **Cognitive Friction** for beginners deploying Linux environments on Android (Termux). By introducing a highly optimized "Foolproof" logic, we reduce the deployment difficulty **from hours to minutes**.
+
+### 🔥 Core Features (v29.0)
+
+| Feature | Description |
 | :--- | :--- |
-| **VNC / X11 无缝切换** | 一键启动桌面环境，支持 Termux:X11 (本机流畅) 和 VNC Server (远程连接，**打破平台界限**)。 |
-| **一键本土化** | 自动注入**中文环境、字体**和**替换清华/USTC等高速镜像源**，彻底解决下载慢和中文乱码的痛点。 |
-| **抗焦虑 UI** | 引入 `enter_mode/exit_mode` 逻辑，强制**画面稳定**，消除新手在复杂终端中的**认知焦虑**。 |
+| **🛡️ Foolproof Interaction** | **Global "Back" Button (0)** added to every menu. Prevents users from getting stuck in sub-menus. Input validation prevents crashes. |
+| **🖥️ GUI Seamless Switch** | One-click toggle between **Termux:X11** (Hardware Accelerated) and **VNC Server** (Legacy/Remote). Includes auto-cleanup for "zombie" processes. |
+| **✨ Auto-Beautification** | Automatically detects and installs **Fastfetch** (or Neofetch). Injects startup info into `.bashrc` intelligently. |
+| **📦 Multi-Distro Engine** | Unified logic for **Debian, Ubuntu, Kali, Arch, Alpine**. One script engine controls `apt`, `pacman`, `apk`, and `dnf`. |
+| **🔧 Deep Cleaning** | Includes a "Violent Cleanup" mode for audio services (PulseAudio) and X11 lock files to fix black screen issues. |
 
 ---
 
-## 🛠️ II. 安装指南
+## 🛠️ II. Installation Guide
 
-### 预备工作
+### Prerequisites
 
-请确保你已经安装了 Termux，并执行了基础设置：
+Ensure Termux is installed and storage permission is granted:
 
 ```bash
-# 1. 更新基础包
+# 1. Update Base System
 pkg update && pkg upgrade -y
-# 2. 安装 proot-distro
-pkg install proot-distro -y
-# 3. 授予存储权限
-termux-setup-storage
 
-一键部署
-（请将你的实际部署代码替换下面的示例代码块）
-# 示例：将 XXY 脚本部署到 $PREFIX/bin/xxy
-# 请将 'YOUR_CODE_HERE' 替换为你的实际部署 URL 或代码
-curl -L YOUR_CODE_HERE > $PREFIX/bin/xxy
+# 2. Install Dependencies
+pkg install proot-distro pulseaudio wget -y
+
+# 3. Grant Storage Permission
+termux-setup-storage
+🚀 One-Click Installation
+Copy and paste the following command into Termux:
+code
+Bash
+# Replace the URL below with your actual raw file link (e.g., GitHub Raw)
+curl -L https://raw.githubusercontent.com/YOUR_USERNAME/XXY/main/xxy.sh > $PREFIX/bin/xxy
+
+# Grant execution permission
 chmod +x $PREFIX/bin/xxy
 
-# 启动主菜单
+# Run the program
 xxy
-
-🤝 III. 协同与贡献标准
-我们欢迎所有追求高效和稳定的开发者和用户加入。请将你的力量投入到系统级优化中。
-高质量 Bug 报告要求
-为了保护维护者（你）的核心认知能量，我们要求高质量的反馈：
- * 环境： 必须注明 手机型号/Android 版本。
- * 系统名： 必须注明你操作的 Linux 系统名（如 ubuntu, kali）。
- * 重现步骤： 必须提供清晰、可重复的步骤。
-> 注意： 低质量的 Bug 报告（例如：“我的脚本坏了”）将被直接关闭。
-> 
-IV. 许可证与声明
-本项目基于 GPL-3.0 协议 开源。
- * 本项目仅供学习交流使用，请勿用于任何非法目的。
- * 本项目不承担任何因错误配置或恶意使用造成的后果。
-感谢你成为这个高效协同系统的一部分！
+🤝 III. Contribution Standards
+We invite developers to help build a robust ecosystem.
+i18n: Add high-speed mirrors for regions outside China.
+Compatibility: Test on Android 12/13/14 and report phantom process issues.
+Code: Improve the get_universal_script logic for more distros (Fedora/OpenSUSE).
+Bug Reporting
+Environment: Phone Model / Android Version.
+Log: Provide the error output.
+Note: Vague reports like "It doesn't work" will be ignored to preserve maintainer energy.
+⚖️ IV. License & Disclaimer
+This project is open-sourced under the GPL-3.0 License.
+This tool is for educational purposes only.
+The author assumes no liability for data loss or misuse.
+<div align="center">
+<sub>Built with ❤️ by the XXY Team</sub>
+</div>
+```
