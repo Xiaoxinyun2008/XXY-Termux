@@ -48,13 +48,18 @@ Before installing, ensure your Termux is up to date and storage permissions are 
 pkg update -y && pkg upgrade -y
 pkg install proot-distro curl -y
 termux-setup-storage
+```
 🚀 One-Click Install Command
+
 Copy and paste the following command into your Termux terminal:
 code
 Bash
 # Download and install XXY
+```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/XXY-Termux/main/xxy)"
+```
 Note: Replace YOUR_GITHUB_USERNAME with your actual GitHub username.
+
 🎮 Usage Guide
 1. Main Menu
 Once installed, simply type xxy to launch the tool.
@@ -85,4 +90,3 @@ Distributed under the GPL-3.0 License. See LICENSE for more information.
 <div align="center">
 <sub>Built with ❤️ by the XXY Team</sub>
 </div>
-```
