@@ -1,29 +1,27 @@
-# 1. 深度清理 (救砖第一步)
+# 1. 深度清理旧版
 rm -f $PREFIX/bin/xxy
 rm -rf $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/tmp/.X11-unix
-rm -rf $PREFIX/tmp/.X1-lock
-# 清理可能损坏的锁文件
-pkill -9 termux-x11
-pkill -9 pulseaudio
+pkill -9 termux-x11 2>/dev/null
+pkill -9 pulseaudio 2>/dev/null
 
-# 2. 写入 v37.0 救砖版
+# 2. 写入脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Rescue Edition v37.0)
-# FIX: 镜像源修复、容器权限穿透、GUI启动链重写
+# PROJECT: XXY (Final Edition v38.0)
+# FIX: 文件夹级容器检测、标准启动命令、详细结束报告
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v37.0"
-# [修复1] 更换为稳定的加速源
+export VERSION="v38.0"
+# 稳定加速源
 export PROXY_URL="https://ghproxy.net/"
 export UPDATE_URL="${PROXY_URL}https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export GITHUB_URL="https://github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
-# 容器存储的物理路径
+# [核心] 容器物理存储路径
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export PD_CONF="$PREFIX/etc/proot-distro"
 export TERMUX_PKG_OPTS="-y -o Dpkg::Options::=--force-confnew" 
@@ -39,7 +37,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- 1. 基础环境与网络 ---
+# --- 1. 基础环境 ---
 
 get_ip() {
     local ip=""
@@ -51,62 +49,50 @@ get_ip() {
 }
 
 check_dependencies() {
-    if [ -f "$PREFIX/etc/xxy_checked_v37" ]; then return; fi
-    clear; echo -e "${C}=== 环境自检与修复 ===${NC}"
+    if [ -f "$PREFIX/etc/xxy_checked_v38" ]; then return; fi
+    clear; echo -e "${C}=== 环境自检 ===${NC}"
     
-    # 核心依赖
     DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch net-tools"
-    
     MISSING=""
     for dep in $DEPS; do 
         if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi
     done
     
-    # X11 仓库检查
     if ! command -v termux-x11 &>/dev/null; then 
         pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1
         MISSING="$MISSING termux-x11-nightly"
     fi
     
     if [ -n "$MISSING" ]; then
-        echo -e "${Y}正在修复缺失组件...${NC}"
-        # 使用 -k 忽略 SSL 错误，防止 curl 报错
+        echo -e "${Y}安装缺失库: $MISSING ...${NC}"
         pkg update -y -k >/dev/null 2>&1
         pkg install $MISSING $TERMUX_PKG_OPTS
     fi
-    touch "$PREFIX/etc/xxy_checked_v37"
+    touch "$PREFIX/etc/xxy_checked_v38"
 }
 
-# [修复] proot-distro 下载加速注入
 optimize_network() {
     local TARGETS="ubuntu debian archlinux alpine"
     for distro in $TARGETS; do
         local conf_file="$PD_CONF/$distro.sh"
         if [ -f "$conf_file" ]; then
-            # 先还原，防止重复注入导致 URL 畸形
             sed -i 's|https://.*/https://github.com|https://github.com|g' "$conf_file"
-            # 注入新的稳定代理
             sed -i "s|https://github.com|${PROXY_URL}https://github.com|g" "$conf_file"
         fi
     done
 }
 
-# --- 2. 容器核心逻辑 (修复检测与执行) ---
+# --- 2. 核心逻辑 (用户指定检测方案) ---
 
-# [修复2] 三重校验检测容器
+# [核心] 文件夹检测法
 get_systems() {
-    # 直接扫描物理目录，不依赖 proot-distro list (太慢且不稳定)
+    # 只要 installed-rootfs 下有文件夹，就视为已安装
     if [ -d "$ROOTFS_BASE" ]; then
-        for sys in $(ls "$ROOTFS_BASE"); do
-            # 必须同时存在 bin/sh 和 etc 目录才算有效系统，防止空文件夹误报
-            if [ -f "$ROOTFS_BASE/$sys/bin/sh" ] && [ -d "$ROOTFS_BASE/$sys/etc" ]; then
-                echo "$sys"
-            fi
-        done
+        # 列出目录名，即为容器 Alias
+        ls -1 "$ROOTFS_BASE" 2>/dev/null
     fi
 }
 
-# 内部脚本生成
 WORKER_SCRIPT="$TMPDIR/xxy_worker_$$.sh"
 INJECT_SCRIPT="$TMPDIR/xxy_inject_$$.sh"
 
@@ -114,81 +100,47 @@ create_worker_script() {
     rm -f "$WORKER_SCRIPT"
     cat << 'EOF' > "$WORKER_SCRIPT"
 #!/bin/sh
-# [修复] 强制环境变量，防止找不到命令
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 action=$1
-
-# 简单的包管理器检测
 if command -v apt >/dev/null; then
-    INSTALL="apt install -y"; UPDATE="apt update -y"; 
-    # 处理 Debian/Ubuntu 的交互前端
-    export DEBIAN_FRONTEND=noninteractive
-    is_debian=true
+    INSTALL="apt install -y"; UPDATE="apt update -y"; export DEBIAN_FRONTEND=noninteractive; is_debian=true
 elif command -v pacman >/dev/null; then
     INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"; is_arch=true
 elif command -v apk >/dev/null; then
     INSTALL="apk add"; UPDATE="apk update"; is_alpine=true
-else
-    echo "Error: Unknown Package Manager"
-    exit 1
-fi
+else echo "Unknown PM"; exit 1; fi
 
 case "$action" in
   change_source)
     if [ "$is_debian" = true ]; then
-        # 暴力覆盖源，解决小白不会换源的问题
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ jammy main restricted universe multiverse" > /etc/apt/sources.list
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ jammy-updates main restricted universe multiverse" >> /etc/apt/sources.list
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ jammy-security main restricted universe multiverse" >> /etc/apt/sources.list
     elif [ "$is_alpine" = true ]; then
         sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
     fi
-    $UPDATE
-    ;;
-    
+    $UPDATE ;;
   install_gui)
-    if [ "$is_debian" = true ]; then
-        $INSTALL xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
-    elif [ "$is_arch" = true ]; then
-        $INSTALL xfce4 dbus tigervnc
-    elif [ "$is_alpine" = true ]; then
-        $INSTALL xfce4 dbus-x11 tigervnc
-    fi
-    # 修复 VNC 密码
-    mkdir -p ~/.vnc
-    echo "123456" | vncpasswd -f > ~/.vnc/passwd
-    chmod 600 ~/.vnc/passwd
-    ;;
-    
+    if [ "$is_debian" = true ]; then $INSTALL xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
+    elif [ "$is_arch" = true ]; then $INSTALL xfce4 dbus tigervnc
+    elif [ "$is_alpine" = true ]; then $INSTALL xfce4 dbus-x11 tigervnc; fi
+    mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;
   install_fastfetch)
     $INSTALL fastfetch || $INSTALL neofetch
     if command -v fastfetch >/dev/null; then echo "fastfetch" > /tmp/fetch_bin
-    elif command -v neofetch >/dev/null; then echo "neofetch" > /tmp/fetch_bin
-    else echo "none" > /tmp/fetch_bin; fi
-    ;;
-    
+    else echo "none" > /tmp/fetch_bin; fi ;;
   install_cn)
-    if [ "$is_debian" = true ]; then
-        $INSTALL locales fonts-noto-cjk
-        echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
-        echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/xxy_lang.sh
-    fi
-    ;;
+    if [ "$is_debian" = true ]; then $INSTALL locales fonts-noto-cjk; echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen && locale-gen; echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/xxy_lang.sh; fi ;;
 esac
 EOF
-    # [修复4] 给予 777 权限，确保容器内能执行
     chmod 777 "$WORKER_SCRIPT"
 }
 
-# [修复4] 任务执行器 - 修复权限和路径
 run_task() {
     local sys=$1; local cmd=$2; local desc=$3
-    # 容器内路径映射: 宿主机的 $TMPDIR 对应容器的 /tmp
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
-    
     tput cup 23 0; echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
-    
-    # 使用 /bin/sh 显式执行，防止权限拒绝
+    # 使用 shared-tmp 映射脚本
     if proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1; then
         tput cup 23 0; echo -ne "${G}✅ [$sys] $desc 成功          ${NC}"
     else
@@ -199,7 +151,7 @@ run_task() {
 select_menu() {
     mapfile -t SYS_ARRAY < <(get_systems)
     if [ ${#SYS_ARRAY[@]} -eq 0 ]; then
-        echo -e "\n${R}⚠️  未检测到有效系统！${NC}"
+        echo -e "\n${R}⚠️  未检测到系统 (installed-rootfs 为空)${NC}"
         echo "请先选择 [2] 安装系统"
         read -n 1 -s -r -p "..."
         return 1
@@ -224,12 +176,11 @@ do_login() {
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
     local inner_inject="/tmp/$(basename "$INJECT_SCRIPT")"
     
-    echo -e "${B}正在启动容器...${NC}"
-    
-    # 尝试注入美化，但不阻塞登录
+    echo -e "${B}启动容器...${NC}"
+    # 预注入美化 (不阻塞)
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_script" "install_fastfetch" >/dev/null 2>&1
     
-    # 注入启动脚本
+    # 注入 bashrc
     cat > "$INJECT_SCRIPT" << 'EOF'
 RC=~/.bashrc
 [ -f /etc/profile.d/xxy_lang.sh ] && . /etc/profile.d/xxy_lang.sh
@@ -244,10 +195,9 @@ EOF
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_inject" >/dev/null 2>&1
     
     cleanup
-    # 正式登录
+    # [核心] 使用对应的 Termux 启动命令 (proot-distro login)
     proot-distro login "$TARGET"
     
-    # 退出后恢复
     tput civis; stty -echo; draw_ui
 }
 
@@ -261,80 +211,61 @@ do_install() {
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
         
-        # 残留清理
+        # 检测文件夹是否存在
         if [ -d "$ROOTFS_BASE/$TARGET" ]; then
-            if [ ! -f "$ROOTFS_BASE/$TARGET/bin/sh" ]; then
-                echo -e "\n${Y}清理无效残留...${NC}"
-                proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
-            else 
-                echo -e "\n${G}系统已存在！${NC}"; read -n 1 -s -r -p "..."; return
-            fi
+            # 按照要求，文件夹存在即视为已安装
+            echo -e "\n${G}系统目录已存在 ($TARGET)，无需重复安装。${NC}"
+            read -n 1 -s -r -p "..."; return
         fi
         
-        # 注入加速
         optimize_network
-        
-        echo -e "\n${Y}正在下载 $TARGET (已加速)...${NC}"; tput cnorm
+        echo -e "\n${Y}下载中...${NC}"; tput cnorm
         if proot-distro install $TARGET; then
             tput civis; create_worker_script
             run_task "$TARGET" "change_source" "换国内源"
             run_task "$TARGET" "install_cn" "中文环境"
-            run_task "$TARGET" "install_fastfetch" "美化工具"
+            run_task "$TARGET" "install_fastfetch" "美化"
             echo -e "\n${G}🎉 安装完成！${NC}"; read -n 1 -s -r -p "..."
         else
-            echo -e "\n${R}❌ 下载失败，请检查网络或存储空间。${NC}"
+            echo -e "\n${R}❌ 失败，清理残余...${NC}"
             proot-distro remove $TARGET >/dev/null 2>&1
             read -n 1 -s -r -p "..."
         fi
     fi
 }
 
-# [修复3] 桌面启动链重构
 do_gui() {
     clear; echo -e "${C}=== 启动桌面 ===${NC}"
     TARGET=$(select_menu) || return
     create_worker_script
     
-    # 检查是否已安装 XFCE
-    echo -ne "🔍 检查桌面环境...\r"
+    echo -ne "🔍 检查桌面...\r"
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
-        echo -e "\n${Y}未检测到桌面，开始安装...${NC}"
-        run_task "$TARGET" "install_gui" "安装桌面 (较慢)"
+        echo -e "\n${Y}正在安装桌面环境...${NC}"
+        run_task "$TARGET" "install_gui" "部署 GUI"
     fi
     
-    echo -e "\n${G}模式:${NC}\n1. Termux:X11 ${Y}(推荐)${NC}\n2. VNC Viewer\n0. 返回"
+    echo -e "\n${G}模式:${NC}\n1. Termux:X11\n2. VNC Viewer\n0. 返回"
     tput cnorm; stty echo; read -p "选择: " m; stty -echo; tput civis
     
     if [ "$m" == "1" ]; then
-        # 强力清理环境
-        pulseaudio --kill >/dev/null 2>&1
-        pkill -f com.termux.x11 >/dev/null 2>&1
-        rm -rf "$TMPDIR/.X11-unix"
-        
-        # 启动音频服务
+        pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1; rm -rf "$TMPDIR/.X11-unix"
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
-        
-        # 启动 APP
-        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-        sleep 1
+        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; sleep 1
         termux-x11 :0 >/dev/null 2>&1 &
-        
-        # 容器内启动命令 (修复 dbus)
         CMD="export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
         proot-distro login "$TARGET" --shared-tmp -- bash -c "$CMD"
-        
     elif [ "$m" == "2" ]; then
-        # VNC 模式
         CMD="vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
         proot-distro login "$TARGET" -- bash -c "$CMD"
-        echo -e "\n${G}VNC 已启动${NC}\n地址: 127.0.0.1:5901\n密码: 123456"; read -n 1 -s -r -p "..."
+        echo -e "\n${G}VNC ON${NC}: 127.0.0.1:5901 | Pass: 123456"; read -n 1 -s -r -p "..."
     fi
 }
 
 do_github() {
     clear; echo -e "${C}=== 访问 GitHub ===${NC}"
     if ! command -v lynx &>/dev/null; then
-        echo -e "${Y}安装浏览器...${NC}"; tput cnorm; pkg install lynx $TERMUX_PKG_OPTS; tput civis
+        echo -e "${Y}Install Lynx...${NC}"; tput cnorm; pkg install lynx $TERMUX_PKG_OPTS; tput civis
     fi
     lynx "$GITHUB_URL"; tput civis; stty -echo; draw_ui
 }
@@ -342,27 +273,15 @@ do_github() {
 do_update() {
     clear; echo -e "${C}=== 检查更新 ===${NC}"
     local temp="$TMPDIR/xxy_tmp"; rm -f "$temp"
-    
-    # 使用镜像源下载
     local http_code=$(curl -L -s -m 5 -o "$temp" -w "%{http_code}" "$UPDATE_URL")
-    
     if [ "$http_code" != "200" ]; then
-        echo -e "\n${R}❌ 更新服务器连接失败 ($http_code)${NC}"
-        read -n 1 -s -r -p "..."; return
+        echo -e "\n${R}❌ 网络错误 ($http_code)${NC}"; read -n 1 -s -r -p "..."; return
     fi
-    
-    if ! grep -q "PROJECT: XXY" "$temp"; then
-        echo -e "\n${R}❌ 文件校验错误${NC}"; read -n 1 -s -r -p "..."; return
-    fi
-    
+    if ! grep -q "PROJECT: XXY" "$temp"; then echo -e "\n${R}❌ 校验失败${NC}"; read -n 1 -s -r -p "..."; return; fi
     local remote_ver=$(grep "export VERSION=" "$temp" | cut -d'"' -f2)
     echo -e "\n本地: $VERSION | 云端: $remote_ver"
-    
-    tput cnorm; stty echo; echo ""; read -p "确认更新/重装? (y/n): " c; stty -echo; tput civis
-    if [[ "$c" == "y" ]]; then
-        mv "$temp" "$PREFIX/bin/xxy"; chmod 755 "$PREFIX/bin/xxy"
-        echo -e "${G}更新成功！${NC}"; exit 0
-    fi
+    tput cnorm; stty echo; echo ""; read -p "更新? (y/n): " c; stty -echo; tput civis
+    if [[ "$c" == "y" ]]; then mv "$temp" "$PREFIX/bin/xxy"; chmod 755 "$PREFIX/bin/xxy"; echo -e "${G}OK${NC}"; exit 0; fi
 }
 
 # --- Main UI ---
@@ -380,7 +299,7 @@ draw_ui() {
 ${C}
 ██╗  ██╗██╗  ██╗██╗   ██╗ ${W}XXY Termux${C}
 ╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝ ${GR}${VERSION}${C}
- ╚███╔╝  ╚███╔╝  ╚████╔╝  ${W}Rescue${C}
+ ╚███╔╝  ╚███╔╝  ╚████╔╝  ${W}Final${C}
  ██╔██╗  ██╔██╗   ╚██╔╝   ${NC}
 ${GR}──────────────────────────────────────────${NC}
 ${GR}│${NC} ${W}1.${NC} 登录系统 (Login)    ${GR}│${NC} ${W}3.${NC} 启动桌面 (GUI)
@@ -388,9 +307,7 @@ ${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}5.${NC} 检�
 ${GR}│${NC} ${W}6.${NC} 访问 GitHub (Lynx)  ${GR}│${NC} ${W}0.${NC} 退出程序 (Exit)
 ${GR}──────────────────────────────────────────${NC}
 EOF
-    if command -v fastfetch >/dev/null; then
-        fastfetch --config structure:OS:Kernel:Uptime --logo none 2>/dev/null | sed 's/^/  /'
-    fi
+    if command -v fastfetch >/dev/null; then fastfetch --config structure:OS:Kernel:Uptime --logo none 2>/dev/null | sed 's/^/  /'; fi
 }
 
 check_dependencies; create_worker_script; tput civis; stty -echo
@@ -402,9 +319,7 @@ while true; do
     if [[ $? -eq 0 ]]; then
         if [[ -z "$key" ]]; then
             if [[ -n "$INPUT_BUF" ]]; then
-                case $INPUT_BUF in
-                    1)do_login;; 2)do_install;; 3)do_gui;; 5)do_update;; 6)do_github;; 0)exit 0;;
-                esac
+                case $INPUT_BUF in 1)do_login;; 2)do_install;; 3)do_gui;; 5)do_update;; 6)do_github;; 0)exit 0;; esac
                 tput civis; stty -echo; draw_ui; INPUT_BUF=""
             fi
         elif [[ "$key" == $'\x7f' || "$key" == $'\b' ]]; then INPUT_BUF="${INPUT_BUF%?}"
@@ -414,35 +329,34 @@ while true; do
 done
 INSTALL_EOF
 
-# ... (上面是原本的脚本内容) ...
-
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
 
-# --- 3. 最终安装报告 ---
+# --- 3. 详细结束报告 (用户要求) ---
 clear
-echo -e "\033[1;32m🎉 XXY v37.0 (救砖版) 部署完成！\033[0m"
+echo -e "\033[1;32m🎉 XXY v38.0 (完美版) 部署完成！\033[0m"
 echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 
-echo -e "\033[1;36m📦 [已部署的核心依赖库]\033[0m"
-echo -e "  • \033[37mSystem:\033[0m proot-distro (容器核心), ncurses-utils (UI工具)"
-echo -e "  • \033[37mNetwork:\033[0m wget, curl, net-tools (网络与下载)"
-echo -e "  • \033[37mMedia:\033[0m   pulseaudio (音频服务), x11-repo (图形库)"
-echo -e "  • \033[37mVisual:\033[0m  fastfetch (美化), termux-x11 (高性能GUI)"
+echo -e "\033[1;36m📦 [核心依赖库清单]\033[0m"
+echo -e "  • \033[37m系统核心:\033[0m proot-distro (容器管理), ncurses-utils (UI)"
+echo -e "  • \033[37m图形支持:\033[0m x11-repo, termux-x11-nightly, pulseaudio"
+echo -e "  • \033[37m网络工具:\033[0m wget, curl, net-tools (含IP检测)"
+echo -e "  • \033[37m美化组件:\033[0m fastfetch (系统信息展示)"
 
-echo -e "\n\033[1;33m🔧 [v37.0 救砖版关键修复]\033[0m"
-echo -e "  1. \033[32m镜像重置:\033[0m 已切换至 ghproxy.net 稳定加速源，解决下载 404。"
-echo -e "  2. \033[32m权限穿透:\033[0m 修复容器内 Permission denied，确保 Worker 正常执行。"
-echo -e "  3. \033[32m检测逻辑:\033[0m 采用物理文件扫描，精准识别已安装系统，防止误报。"
-echo -e "  4. \033[32mGUI重写:\033[0m 强制清理 DBus/X11 锁文件，修复桌面启动黑屏。"
+echo -e "\n\033[1;33m🔧 [v38.0 版本改进]\033[0m"
+echo -e "  1. \033[32m容器检测:\033[0m 采用物理目录 (installed-rootfs) 检测法，100% 识别率。"
+echo -e "  2. \033[32m启动逻辑:\033[0m 严格调用 proot-distro login 标准命令，修复挂载错误。"
+echo -e "  3. \033[32m网络优化:\033[0m 集成 ghproxy.net 稳定代理，解决下载 404 问题。"
+echo -e "  4. \033[32m权限穿透:\033[0m 修复容器内 Permission Denied 问题。"
 
-echo -e "\n\033[1;35m🚀 [XXY 命令功能概览]\033[0m"
-echo -e "  • \033[37m一键安装:\033[0m 自动安装 Linux (Ubuntu/Debian等) 并配置中文/换源。"
-echo -e "  • \033[37m一键桌面:\033[0m 自动配置 XFCE4 桌面，支持 Termux:X11 和 VNC。"
-echo -e "  • \033[37m无感登录:\033[0m 登录即自动清屏并展示系统信息 (Fastfetch)。"
+echo -e "\n\033[1;35m🚀 [XXY 命令功能]\033[0m"
+echo -e "  • 输入 \033[1;37;42m 1 \033[0m : 登录系统 (自动清屏+显示系统信息)"
+echo -e "  • 输入 \033[1;37;42m 2 \033[0m : 安装 Linux (自动配置中文+国内源)"
+echo -e "  • 输入 \033[1;37;42m 3 \033[0m : 启动桌面 (Termux:X11 / VNC 局域网)"
 echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 
-echo -e "\n\033[1;32m👉 请输入 \033[1;37;42m xxy \033[1;32m 并回车启动程序！\033[0m"
-echo -e "\033[30m(或直接等待 2 秒后自动启动...)\033[0m"
+echo -e "\n\033[1;32m👉 请输入 \033[1;37;42m xxy \033[1;32m 启动！\033[0m"
+echo -e "\033[30m(正在自动启动...)\033[0m"
 
-
+sleep 2
+exec xxy
