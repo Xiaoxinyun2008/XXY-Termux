@@ -19,6 +19,12 @@
 >
 > 👉 **[🇨🇳 点击这里查看中文文档 / Chinese Documentation](README_CN.md)**
 
+## 📚 Extended Documents
+
+- [Quickstart Guide](QUICKSTART.md) – Step-by-step walkthrough for first-time setup and daily workflows.
+- [Changelog](CHANGELOG.md) – Detailed version history and upgrade instructions.
+- [Improvements Report](IMPROVEMENTS.md) – Deep dive into the AI-assisted enhancements introduced in v5.0.
+
 ---
 
 ## 📖 Introduction
