@@ -1,21 +1,22 @@
-# 1. 强制清理旧版本，防止缓存干扰
+# 1. 强制清理旧版本
 rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
 
-# 2. 写入新版脚本 (使用安全写入模式，杜绝语法错误)
+# 2. 写入新版脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Stable Edition v33.0)
-# FIX: 修复容器识别逻辑、Worker执行权限、GUI启动链
+# PROJECT: XXY (Stable Edition v33.1)
+# UPDATE: 修复路径映射、系统识别、VNC密码自动化、国内源加速
 # ==============================================================================
 
 # --- 0. 基础环境自检 ---
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
+export PROOT_TMP="/tmp" # 容器内的 tmp 路径
 [ ! -d "$TMPDIR" ] && mkdir -p "$TMPDIR"
 
-# 捕获异常退出，恢复终端
+# 捕获异常退出
 cleanup() {
     tput cnorm
     stty echo
@@ -23,15 +24,29 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 检查必要依赖
-CHECK_DEPS="proot-distro pulseaudio wget curl ncurses-utils"
-for dep in $CHECK_DEPS; do
-    if ! command -v $dep &>/dev/null; then
-        echo "正在安装缺失依赖: $dep ..."
-        pkg update -y && pkg install $CHECK_DEPS -y
-        break
-    fi
+# 检查必要依赖 (包含 X11 仓库)
+echo "正在自检依赖环境..."
+if ! command -v proot-distro &>/dev/null; then
+    pkg update -y && pkg install proot-distro -y
+fi
+
+# 检查 termux-x11 和基础工具
+MISSING_DEPS=""
+for dep in pulseaudio wget curl ncurses-utils grep sed awk; do
+    if ! command -v $dep &>/dev/null; then MISSING_DEPS="$MISSING_DEPS $dep"; fi
 done
+
+# 特殊检查 termux-x11 (在 x11-repo 中)
+if ! command -v termux-x11 &>/dev/null; then
+    echo "正在启用 X11 仓库并安装必要组件..."
+    pkg install x11-repo -y
+    MISSING_DEPS="$MISSING_DEPS termux-x11-nightly"
+fi
+
+if [ -n "$MISSING_DEPS" ]; then
+    echo "正在安装缺失依赖: $MISSING_DEPS ..."
+    pkg install $MISSING_DEPS -y
+fi
 
 # 定义内部脚本路径
 WORKER_SCRIPT="$TMPDIR/xxy_worker_$$.sh"
@@ -44,81 +59,109 @@ W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 
 # --- 🔧 核心功能函数 ---
 
-# 1. 生成容器内部执行的 Worker 脚本
-# (使用函数写入，避免 EOF 嵌套导致的变量扩展错误)
+# 1. 生成容器内部 Worker 脚本 (增强版)
 create_worker_script() {
     rm -f "$WORKER_SCRIPT"
     touch "$WORKER_SCRIPT"
     
-    # 逐行写入，确保 $1 等变量在容器内才被解析
-    echo '#!/bin/sh' >> "$WORKER_SCRIPT"
-    echo 'action=$1' >> "$WORKER_SCRIPT"
+    cat << 'EOF' > "$WORKER_SCRIPT"
+#!/bin/sh
+action=$1
+is_debian=false
+
+# --- 包管理器探测 ---
+if command -v apt >/dev/null; then
+    INSTALL="apt install -y"; UPDATE="apt update -y"
+    is_debian=true
+elif command -v pacman >/dev/null; then
+    INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"
+elif command -v apk >/dev/null; then
+    INSTALL="apk add"; UPDATE="apk update"
+else
+    echo "Unknown PM"; exit 1
+fi
+
+# --- 任务逻辑 ---
+case "$action" in
+  change_source)
+    # 简单的换源操作 (针对小白加速)
+    if [ -f /etc/apt/sources.list ]; then
+        sed -i 's/http:\/\/.*archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+        sed -i 's/http:\/\/.*security.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+        sed -i 's/http:\/\/deb.debian.org/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+    elif [ -f /etc/apk/repositories ]; then
+        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+    fi
+    $UPDATE
+    ;;
+
+  install_gui)
+    if [ "$is_debian" = true ]; then
+        DEBIAN_FRONTEND=noninteractive $INSTALL xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
+    elif command -v pacman >/dev/null; then
+        $INSTALL xfce4 dbus tigervnc
+    elif command -v apk >/dev/null; then
+        $INSTALL xfce4 dbus-x11 tigervnc
+    fi
     
-    # 智能识别包管理器
-    echo 'if command -v apt >/dev/null; then' >> "$WORKER_SCRIPT"
-    echo '    INSTALL="apt install -y"; UPDATE="apt update -y"' >> "$WORKER_SCRIPT"
-    echo '    is_debian=true' >> "$WORKER_SCRIPT"
-    echo 'elif command -v pacman >/dev/null; then' >> "$WORKER_SCRIPT"
-    echo '    INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"' >> "$WORKER_SCRIPT"
-    echo 'elif command -v apk >/dev/null; then' >> "$WORKER_SCRIPT"
-    echo '    INSTALL="apk add"; UPDATE="apk update"' >> "$WORKER_SCRIPT"
-    echo 'else echo "Unknown PM"; exit 1; fi' >> "$WORKER_SCRIPT"
-    
-    # 任务分发
-    echo 'case "$action" in' >> "$WORKER_SCRIPT"
-    echo '  update) $UPDATE ;;' >> "$WORKER_SCRIPT"
-    
-    echo '  install_gui)' >> "$WORKER_SCRIPT"
-    echo '    if [ "$is_debian" = true ]; then' >> "$WORKER_SCRIPT"
-    echo '      DEBIAN_FRONTEND=noninteractive $INSTALL xfce4 xfce4-goodies dbus-x11' >> "$WORKER_SCRIPT"
-    echo '    else' >> "$WORKER_SCRIPT"
-    echo '      $INSTALL xfce4 dbus-x11' >> "$WORKER_SCRIPT"
-    echo '    fi ;;' >> "$WORKER_SCRIPT"
-    
-    echo '  install_cn)' >> "$WORKER_SCRIPT"
-    echo '    if [ "$is_debian" = true ]; then' >> "$WORKER_SCRIPT"
-    echo '      DEBIAN_FRONTEND=noninteractive $INSTALL locales fonts-noto-cjk ttf-wqy-zenhei' >> "$WORKER_SCRIPT"
-    echo '      echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen && locale-gen' >> "$WORKER_SCRIPT"
-    echo '    elif command -v pacman >/dev/null; then' >> "$WORKER_SCRIPT"
-    echo '      $INSTALL adobe-source-han-sans-cn-fonts' >> "$WORKER_SCRIPT"
-    echo '      echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen && locale-gen' >> "$WORKER_SCRIPT"
-    echo '    elif command -v apk >/dev/null; then' >> "$WORKER_SCRIPT"
-    echo '      $INSTALL font-noto-cjk' >> "$WORKER_SCRIPT"
-    echo '    fi' >> "$WORKER_SCRIPT"
-    echo '    echo "export LANG=zh_CN.UTF-8" >> /etc/profile ;;' >> "$WORKER_SCRIPT"
-    
-    echo '  install_fetch)' >> "$WORKER_SCRIPT"
-    echo '    $INSTALL fastfetch || $INSTALL neofetch' >> "$WORKER_SCRIPT"
-    echo '    if command -v fastfetch >/dev/null; then echo "fastfetch" > /tmp/fetch_bin' >> "$WORKER_SCRIPT"
-    echo '    elif command -v neofetch >/dev/null; then echo "neofetch" > /tmp/fetch_bin' >> "$WORKER_SCRIPT"
-    echo '    else echo "none" > /tmp/fetch_bin; fi ;;' >> "$WORKER_SCRIPT"
-    
-    echo 'esac' >> "$WORKER_SCRIPT"
-    
+    # VNC 密码初始化 (防止小白卡住)
+    if [ ! -f ~/.vnc/passwd ]; then
+        mkdir -p ~/.vnc
+        # 设置密码为 123456
+        echo "123456" | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
+    fi
+    ;;
+
+  install_cn)
+    if [ "$is_debian" = true ]; then
+        DEBIAN_FRONTEND=noninteractive $INSTALL locales fonts-noto-cjk ttf-wqy-zenhei
+        echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
+    elif command -v pacman >/dev/null; then
+        $INSTALL adobe-source-han-sans-cn-fonts
+        echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen && locale-gen
+    elif command -v apk >/dev/null; then
+        $INSTALL font-noto-cjk
+    fi
+    echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/locale.sh
+    ;;
+
+  install_fetch)
+    $INSTALL fastfetch || $INSTALL neofetch
+    if command -v fastfetch >/dev/null; then echo "fastfetch" > /tmp/fetch_bin
+    elif command -v neofetch >/dev/null; then echo "neofetch" > /tmp/fetch_bin
+    else echo "none" > /tmp/fetch_bin; fi
+    ;;
+esac
+EOF
     chmod 755 "$WORKER_SCRIPT"
 }
 
-# 2. 精确获取已安装系统 (排除文件干扰)
+# 2. 获取已安装系统 (修复版：从 proot-distro 列表解析)
 get_systems() {
-    # 使用 proot-distro 官方目录结构判断
-    ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs"
-    if [ -d "$ROOTFS" ]; then
-        # 仅列出目录，过滤掉非文件夹内容
-        find "$ROOTFS" -maxdepth 1 -mindepth 1 -type d -exec basename {} \;
-    fi
+    # 解析 "Installed distributions:" 下方的列表
+    # 过滤掉空行和标题，提取以 * 开头的行
+    proot-distro list | awk '
+        /^Installed distributions:/ {flag=1; next}
+        /^Supported distributions:/ {flag=0}
+        flag && /\*/ {print $2}
+    '
 }
 
-# 3. 后台执行任务
+# 3. 后台执行任务 (修复路径映射 Bug)
 run_task() {
     local sys=$1
     local cmd=$2
     local text=$3
     
-    tput cup 18 0
-    echo -ne "${Y}⚙️  正在$text ($sys)... 请稍候${NC}"
+    # 计算容器内的映射路径: $TMPDIR 在容器内是 /tmp
+    local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
     
-    # 登录容器并执行 Worker 脚本
-    proot-distro login "$sys" --shared-tmp -- /bin/sh "$WORKER_SCRIPT" "$cmd" >/dev/null 2>&1
+    tput cup 18 0
+    echo -ne "${Y}⚙️  正在$text... (可能需要几分钟)${NC}"
+    
+    # 执行
+    proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1
     
     tput cup 18 0
     if [ $? -eq 0 ]; then
@@ -128,33 +171,28 @@ run_task() {
     fi
 }
 
-# 4. 系统选择器 (交互逻辑修复)
+# 4. 系统选择器
 select_menu() {
-    # 将函数输出转换为数组
     mapfile -t SYS_ARRAY < <(get_systems)
     
     if [ ${#SYS_ARRAY[@]} -eq 0 ]; then
-        echo -e "\n${R}⚠️ 未检测到已安装的系统！${NC}"
+        echo -e "\n${R}⚠️ 未检测到系统！${NC}"
         echo "请先选择 [2] 安装新系统"
         read -n 1 -s -r -p "按任意键返回..."
         return 1
     fi
 
-    # 打印列表
     for i in "${!SYS_ARRAY[@]}"; do
         echo -e "${G}$((i+1)).${NC} ${SYS_ARRAY[$i]}"
     done
     echo -e "${W}0.${NC} 返回主菜单"
     
-    # 获取输入
     tput cnorm; stty echo
     read -p "👉 请输入序号: " choice
     stty -echo; tput civis
     
-    # 验证输入
     if [ "$choice" == "0" ] || [ -z "$choice" ]; then return 1; fi
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#SYS_ARRAY[@]}" ]; then
-        # 返回选中的系统名称
         echo "${SYS_ARRAY[$((choice-1))]}"
         return 0
     else
@@ -162,46 +200,45 @@ select_menu() {
     fi
 }
 
-# --- 📦 功能模块实现 ---
+# --- 📦 功能模块 ---
 
-# [功能1] 登录
+# [功能1] 登录 (带自动注入)
 do_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
     TARGET=$(select_menu) || return
     
-    # 自动注入美化
     create_worker_script
-    proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$WORKER_SCRIPT" "install_fetch" >/dev/null 2>&1
+    # 获取容器内路径
+    local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
+    local inner_inject="/tmp/$(basename "$INJECT_SCRIPT")"
     
-    # 注入 .bashrc (不覆盖用户配置)
+    # 尝试安装 fetch 工具
+    proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_script" "install_fetch" >/dev/null 2>&1
+    
+    # 注入 bashrc
     cat > "$INJECT_SCRIPT" << 'EOF'
 RC=~/.bashrc
+[ -f /etc/profile.d/locale.sh ] && . /etc/profile.d/locale.sh
 if [ -f /tmp/fetch_bin ]; then
     TOOL=$(cat /tmp/fetch_bin)
     rm -f /tmp/fetch_bin
-    if [ "$TOOL" != "none" ]; then
-        # 如果 bashrc 里没有这个命令，则追加
-        if ! grep -q "$TOOL" "$RC" 2>/dev/null; then
-            echo "" >> "$RC"
-            echo "$TOOL" >> "$RC"
-        fi
+    if [ "$TOOL" != "none" ] && ! grep -q "$TOOL" "$RC" 2>/dev/null; then
+        echo "" >> "$RC"; echo "$TOOL" >> "$RC"
     fi
 fi
 EOF
-    proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$INJECT_SCRIPT" >/dev/null 2>&1
+    proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_inject" >/dev/null 2>&1
     
-    # 正式登录
     cleanup
     proot-distro login "$TARGET"
-    
-    # 退出后恢复 UI
     tput civis; stty -echo; draw_ui
 }
 
-# [功能2] 安装
+# [功能2] 安装 (带自动换源)
 do_install() {
     clear; echo -e "${C}=== 安装新系统 ===${NC}"
-    DISTROS=("ubuntu" "debian" "kali" "archlinux" "alpine")
+    # 仅列出推荐给小白的稳定版
+    DISTROS=("ubuntu" "debian" "archlinux" "alpine")
     for i in "${!DISTROS[@]}"; do echo -e "${W}$((i+1)).${NC} ${DISTROS[$i]}"; done
     echo -e "${W}0.${NC} 返回"
     
@@ -213,70 +250,72 @@ do_install() {
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
         
-        if [ -d "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET" ]; then
-            echo -e "${R}系统已存在！${NC}"; read -n 1 -s -r -p "按任意键继续..."; return
-        fi
-        
-        echo -e "\n正在下载并安装 $TARGET..."
+        echo -e "\n${Y}正在下载 $TARGET (请保持网络通畅)...${NC}"
         tput cnorm
         if proot-distro install $TARGET; then
             tput civis
             create_worker_script
-            run_task "$TARGET" "update" "更新软件源"
+            # 自动换源 + 更新
+            run_task "$TARGET" "change_source" "自动替换国内源"
             run_task "$TARGET" "install_cn" "配置中文环境"
-            echo -e "\n${G}安装完成！${NC}"; read -n 1 -s -r -p "按任意键继续..."
+            echo -e "\n${G}安装成功！已优化网络配置。${NC}"; read -n 1 -s -r -p "..."
         else
-            echo -e "\n${R}安装失败，请检查网络连接。${NC}"; read -n 1 -s -r -p "按任意键继续..."
+            echo -e "\n${R}安装失败。请检查网络或存储空间。${NC}"; read -n 1 -s -r -p "..."
         fi
     fi
 }
 
-# [功能3] GUI 桌面 (核心修复)
+# [功能3] GUI 桌面 (修复 VNC 和 X11)
 do_gui() {
     clear; echo -e "${C}=== 启动桌面环境 ===${NC}"
     TARGET=$(select_menu) || return
     
     create_worker_script
     
-    # 1. 检查是否安装了桌面
-    echo "正在检查桌面环境..."
+    # 检查是否安装了 XFCE 和 VNC
+    echo "正在检查桌面组件..."
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
-        run_task "$TARGET" "install_gui" "安装 XFCE4 桌面 (耗时较长)"
+        run_task "$TARGET" "install_gui" "安装桌面环境 (下载量大，请耐心)"
     fi
 
     echo -e "\n${G}请选择启动模式:${NC}"
-    echo -e "1. Termux:X11 (硬件加速/流畅/推荐)"
-    echo -e "2. VNC Viewer (兼容性好/通用)"
+    echo -e "1. Termux:X11 (推荐/流畅/需安装APP)"
+    echo -e "2. VNC Viewer (通用/兼容性好)"
     echo -e "0. 返回"
     
     tput cnorm; stty echo
     read -p "模式: " m
     stty -echo; tput civis
     
-    CMD_XFCE="export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
-    
     if [ "$m" == "1" ]; then
-        # 清理环境
+        # X11 模式
         pulseaudio --kill >/dev/null 2>&1
         pkill -f com.termux.x11 >/dev/null 2>&1
         rm -rf "$TMPDIR/.X11-unix"
         
-        # 启动服务
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
-        # 启动 Termux:X11 APP
+        
+        # 尝试启动 APP
         am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-        sleep 1
+        echo "等待 X11 服务启动..."
+        sleep 2
         termux-x11 :0 >/dev/null 2>&1 &
         
+        CMD="export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
         echo "正在启动 XFCE4..."
-        proot-distro login "$TARGET" --shared-tmp -- bash -c "$CMD_XFCE"
+        proot-distro login "$TARGET" --shared-tmp -- bash -c "$CMD"
         
     elif [ "$m" == "2" ]; then
         # VNC 模式
         echo "正在启动 VNC Server..."
-        proot-distro login "$TARGET" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock; vncserver :1"
-        echo -e "\n${G}VNC 已启动! 地址: 127.0.0.1:5901${NC}"
-        echo "密码默认为空或需要在首次运行时设置"
+        # 强制重置锁文件
+        CMD="vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1 /tmp/.X1-lock; vncserver :1 -geometry 1280x720"
+        proot-distro login "$TARGET" -- bash -c "$CMD"
+        
+        echo -e "\n${G}=== VNC 启动成功 ===${NC}"
+        echo -e "地址: ${W}127.0.0.1:5901${NC}"
+        echo -e "密码: ${W}123456${NC} (已自动设置)"
+        echo -e "\n请打开 VNC Viewer APP 连接。"
         read -n 1 -s -r -p "按任意键返回..."
     fi
 }
@@ -287,14 +326,12 @@ do_uninstall() {
     TARGET=$(select_menu) || return
     
     tput cnorm; stty echo
-    read -p "⚠️ 确认彻底删除 $TARGET ? (y/n): " confirm
+    read -p "⚠️ 确认删除 $TARGET ? (y/n): " confirm
     stty -echo; tput civis
     
     if [[ "$confirm" == "y" ]]; then
         proot-distro remove $TARGET
-        # 强制深度清理
-        rm -rf "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET"
-        echo -e "\n${G}已成功删除。${NC}"
+        echo -e "\n${G}已删除。${NC}"
         read -n 1 -s -r -p "..."
     fi
 }
@@ -303,9 +340,9 @@ do_uninstall() {
 
 update_status() {
     NOW=$(date "+%H:%M")
-    # 优化：每 50 帧检查一次内存，避免卡顿
+    # 内存获取容错处理
     if (( FRAME % 50 == 0 )); then
-        MEM=$(free -m | awk 'NR==2{printf "%.1fG", $3/1024}')
+        MEM=$(free -m 2>/dev/null | awk 'NR==2{printf "%.1fG", $3/1024}' || echo "N/A")
     fi
     tput cup 0 34; printf "${B}╭── STATUS ──────────────────────────╮${NC}"
     tput cup 1 34; printf "${B}│${NC} TIME: ${W}%-5s${NC} MEM: ${P}%-5s${NC}         ${B}│${NC}" "$NOW" "$MEM"
@@ -315,22 +352,22 @@ update_status() {
 draw_ui() {
     clear
     printf "${C}██╗  ██╗██╗  ██╗██╗   ██╗ ${W}XXY 稳定版${NC}\n"
-    printf "${C}╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝ ${GR}v33.0 | Stable${NC}\n"
+    printf "${C}╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝ ${GR}v33.1 | Fix  ${NC}\n"
     printf "${C} ╚███╔╝  ╚███╔╝  ╚████╔╝  ${NC}\n"
     printf "${C} ██╔██╗  ██╔██╗   ╚██╔╝   ${NC}\n"
     
     tput cup 8 0
-    printf "${GR}╭── [ 常用功能 ] ───────────────╮ ╭── [ 管理功能 ] ───────────────╮${NC}\n"
+    printf "${GR}╭── [ 常用功能 ] ───────────────╮ ╭── [ 管理功能 ] ────────────╮${NC}\n"
     printf "${GR}│${NC} ${W}1.${NC} 登录系统 (Login)          ${GR}│ │${NC} ${W}4.${NC} 卸载系统 (Uninstall)    ${GR}│${NC}\n"
     printf "${GR}│${NC} ${W}2.${NC} 安装系统 (Install)        ${GR}│ │${NC} ${W}0.${NC} 退出程序 (Exit)         ${GR}│${NC}\n"
     printf "${GR}│${NC} ${W}3.${NC} 启动桌面 (GUI Mode)       ${GR}│ │${NC}                                 ${GR}│${NC}\n"
-    printf "${GR}╰─────────────────────────────╯ ╰─────────────────────────────╯${NC}\n"
+    printf "${GR}╰──────────────────────────────╯ ╰────────────────────────────╯${NC}\n"
 }
 
-# --- 主程序入口 ---
-create_worker_script # 初始化 Worker
-tput civis           # 隐藏光标
-stty -echo           # 关闭回显
+# --- 主程序 ---
+create_worker_script
+tput civis
+stty -echo
 draw_ui
 
 INPUT_BUF=""
@@ -345,13 +382,11 @@ while true; do
     
     tput cup 14 0; printf "${CUR_C}╭── 请输入序号 ──────────────────────────────────────────────╮${NC}"
     tput cup 15 0; printf "${CUR_C}│${NC} ${C}➤${NC} %-40s           ${CUR_C}│${NC}" "$INPUT_BUF${W}█${NC}"
-    tput cup 16 0; printf "${CUR_C}╰────────────────────────────────────────────────────────────╯${NC}"
+    tput cup 16 0; printf "${CUR_C}╰───────────────────────────────────────────────────────────╯${NC}"
 
-    # 极速响应输入
     read -t 0.05 -n 1 key
     if [[ $? -eq 0 ]]; then
         if [[ -z "$key" ]]; then
-            # 回车键处理
             if [[ -n "$INPUT_BUF" ]]; then
                 case $INPUT_BUF in
                     1) do_login ;;
@@ -360,25 +395,19 @@ while true; do
                     4) do_uninstall ;;
                     0) exit 0 ;;
                 esac
-                # 任务结束后重置 UI
                 tput civis; stty -echo; draw_ui; INPUT_BUF=""
             fi
         elif [[ "$key" == $'\x7f' || "$key" == $'\b' ]]; then
-            # 退格键修复
             INPUT_BUF="${INPUT_BUF%?}"
         elif [[ "$key" == $'\e' ]]; then
-            # 忽略特殊键 (防止乱码)
             read -t 0.01 -n 2
         else
-            # 追加输入
             INPUT_BUF="$INPUT_BUF$key"
         fi
     fi
 done
 INSTALL_EOF
 
-# 3. 赋予权限并自动修复格式
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-
-echo -e "\033[1;32m✅ XXY v33.0 更新完成！\n已修复容器查找和 GUI 启动问题。\n输入 xxy 即可启动。\033[0m"
+echo -e "\033[1;32m✅ XXY v33.1 更新完成！\n输入 xxy 即可启动。\033[0m"
