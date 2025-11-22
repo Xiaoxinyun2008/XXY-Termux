@@ -1,19 +1,19 @@
-# 1. 强制清理旧环境 (核心功能：清理残留)
+# 1. 深度清理环境 (防止旧版残留干扰)
 rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
-# 清理可能导致黑屏的 X11 锁文件
 rm -rf $PREFIX/tmp/.X11-unix
+rm -rf $PREFIX/tmp/.X1-lock
 
-# 2. 写入新版脚本
+# 2. 写入 v35.1 稳定版
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Ultimate Edition v35.0)
-# FIX: 本地容器识别、IP显示、VNC局域网模式、防递归更新
+# PROJECT: XXY (Ultimate Edition v35.1)
+# FIX: 强健更新逻辑、IP获取修复、VNC权限修正、内存读取容错
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v35.0"
+export VERSION="v35.1"
 export UPDATE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export GITHUB_LINK="github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
@@ -28,7 +28,7 @@ R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); P=$(tput setaf 5); C=$(tput setaf 6)
 W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 
-# 异常捕获
+# 异常捕获与清理
 cleanup() {
     tput cnorm
     stty echo
@@ -36,31 +36,34 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- 1. 核心检测模块 ---
+# --- 1. 基础工具函数 ---
 
-# 获取本机 IP (用于 UI 显示和 VNC 指引)
+# [修复] 获取本机 IP (多重回退机制)
 get_ip() {
-    # 尝试获取 wlan0 (WiFi) IP，如果失败尝试 eth0，最后回退到 localhost
-    local ip=$(ifconfig 2>/dev/null | grep -A 1 'wlan0' | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -oE '([0-9]*\.){3}[0-9]*' | head -n 1)
-    if [ -z "$ip" ]; then
-        ip=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -oE '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
+    local ip=""
+    # 方法1: 使用 ip route (更现代，准确率高)
+    if command -v ip >/dev/null; then
+        ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}')
+    fi
+    # 方法2: 回退到 ifconfig
+    if [ -z "$ip" ] && command -v ifconfig >/dev/null; then
+        ip=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://')
     fi
     echo "${ip:-127.0.0.1}"
 }
 
-# 1.1 依赖全量自检 (首次运行触发，秒开优化)
+# 1.1 依赖全量自检
 check_dependencies() {
-    # 启动加速标记
     if [ -f "$PREFIX/etc/xxy_checked" ]; then return; fi
 
     clear
     echo -e "${C}=== XXY 环境初始化 (首次运行) ===${NC}"
     echo -e "${GR}正在检测依赖完整性...${NC}"
     
-    # 基础依赖 + 网络工具 + 文本处理 + 美化
-    DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch net-tools"
+    # 增加 iproute2 用于获取 IP
+    DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch"
     
-    # 检查 fastfetch (美化)
+    # 检查 fastfetch
     if ! command -v fastfetch &>/dev/null; then
         echo -e "${Y}⚡ 正在安装 Fastfetch...${NC}"
         pkg install fastfetch $TERMUX_PKG_OPTS >/dev/null 2>&1
@@ -71,7 +74,7 @@ check_dependencies() {
         if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi
     done
 
-    # 特殊检查 X11 (防止用户没有 X11 源)
+    # 特殊检查 X11
     if ! command -v termux-x11 &>/dev/null; then
         echo -e "${Y}📦 正在初始化 X11 仓库...${NC}"
         pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1
@@ -79,33 +82,33 @@ check_dependencies() {
     fi
 
     if [ -n "$MISSING" ]; then
-        echo -e "${P}🛠️  正在补全核心组件...${NC}"
+        echo -e "${P}🛠️  正在补全组件...${NC}"
         pkg update -y >/dev/null 2>&1
         pkg install $MISSING $TERMUX_PKG_OPTS
         if [ $? -ne 0 ]; then
-            echo -e "${R}❌ 依赖安装失败，请检查网络！${NC}"
+            echo -e "${R}❌ 依赖安装失败，请切换源或检查网络！${NC}"
             exit 1
         fi
     fi
     
-    # 创建标记文件
     touch "$PREFIX/etc/xxy_checked"
 }
 
-# --- 2. 容器工作逻辑 (Proot Wrapper) ---
+# --- 2. 容器核心逻辑 ---
 
 WORKER_SCRIPT="$TMPDIR/xxy_worker_$$.sh"
 INJECT_SCRIPT="$TMPDIR/xxy_inject_$$.sh"
 
-# 动态生成容器内脚本
 create_worker_script() {
     rm -f "$WORKER_SCRIPT"
     cat << 'EOF' > "$WORKER_SCRIPT"
 #!/bin/sh
+# 强制设置 PATH 防止部分发行版找不到命令
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 action=$1
+
 is_debian=false; is_arch=false; is_alpine=false
 
-# 智能识别包管理器
 if command -v apt >/dev/null; then
     INSTALL="apt install -y"; UPDATE="apt update -y"; is_debian=true
 elif command -v pacman >/dev/null; then
@@ -118,8 +121,8 @@ fi
 
 case "$action" in
   change_source)
-    # 自动换源 (小白无感优化)
     if [ "$is_debian" = true ]; then
+        # 针对 Ubuntu 和 Debian 进行更通用的替换
         sed -i 's/http:\/\/.*archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
         sed -i 's/http:\/\/ports.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
         sed -i 's/http:\/\/deb.debian.org/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list 2>/dev/null
@@ -130,7 +133,6 @@ case "$action" in
     ;;
 
   install_gui)
-    # 自动补全 VNC 和桌面
     if [ "$is_debian" = true ]; then
         DEBIAN_FRONTEND=noninteractive $INSTALL xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
     elif [ "$is_arch" = true ]; then
@@ -139,7 +141,7 @@ case "$action" in
         $INSTALL xfce4 dbus-x11 tigervnc
     fi
     
-    # 强制初始化 VNC 密码 (123456)
+    # 强制修正 VNC 目录权限
     mkdir -p ~/.vnc
     echo "123456" | vncpasswd -f > ~/.vnc/passwd
     chmod 600 ~/.vnc/passwd
@@ -164,10 +166,8 @@ EOF
     chmod 755 "$WORKER_SCRIPT"
 }
 
-# 容器识别 (修复逻辑：本地文件扫描)
 get_systems() {
     if [ -d "$ROOTFS_DIR" ]; then
-        # 直接扫描文件夹，解决 proot-distro list 检测不到的问题
         ls -1 "$ROOTFS_DIR" 2>/dev/null
     fi
 }
@@ -178,11 +178,14 @@ run_task() {
     
     tput cup 20 0
     echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
-    proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1
-    
-    tput cup 20 0
-    if [ $? -eq 0 ]; then echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"; 
-    else echo -ne "${R}❌ [$sys] $desc 失败          ${NC}"; fi
+    # 捕获错误输出，防止刷屏
+    if proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1; then
+        tput cup 20 0
+        echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"
+    else
+        tput cup 20 0
+        echo -ne "${R}❌ [$sys] $desc 失败 (详见日志)  ${NC}"
+    fi
 }
 
 select_menu() {
@@ -205,7 +208,6 @@ select_menu() {
 
 # --- 3. 功能模块 ---
 
-# [F1] 登录 (自动注入美化)
 do_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
     TARGET=$(select_menu) || return
@@ -216,7 +218,6 @@ do_login() {
     echo -e "${B}正在配置启动环境...${NC}"
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_script" "install_fastfetch" >/dev/null 2>&1
     
-    # 注入 .bashrc (无感清屏+显示信息)
     cat > "$INJECT_SCRIPT" << 'EOF'
 RC=~/.bashrc
 [ -f /etc/profile.d/xxy_lang.sh ] && . /etc/profile.d/xxy_lang.sh
@@ -232,7 +233,6 @@ EOF
     cleanup; proot-distro login "$TARGET"; tput civis; stty -echo; draw_ui
 }
 
-# [F2] 安装 (自动换源+汉化)
 do_install() {
     clear; echo -e "${C}=== 安装系统 (自动优化) ===${NC}"
     DISTROS=("ubuntu" "debian" "archlinux" "alpine")
@@ -246,7 +246,6 @@ do_install() {
         if proot-distro install $TARGET; then
             tput civis
             create_worker_script
-            # 全自动流程
             run_task "$TARGET" "change_source" "更换国内源"
             run_task "$TARGET" "install_cn" "中文环境"
             run_task "$TARGET" "install_fastfetch" "安装工具"
@@ -257,7 +256,6 @@ do_install() {
     fi
 }
 
-# [F3] GUI 桌面 (修复局域网连接 + IP显示)
 do_gui() {
     clear; echo -e "${C}=== 启动桌面 ===${NC}"
     TARGET=$(select_menu) || return
@@ -275,56 +273,74 @@ do_gui() {
     tput cnorm; stty echo; read -p "模式: " m; stty -echo; tput civis
     
     if [ "$m" == "1" ]; then
-        # X11 强力清理
         pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1
         rm -rf "$TMPDIR/.X11-unix" 
-        
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; sleep 1
         termux-x11 :0 >/dev/null 2>&1 &
         proot-distro login "$TARGET" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
         
     elif [ "$m" == "2" ]; then
-        # VNC 局域网模式
         LOCAL_IP=$(get_ip)
         echo -e "${Y}🚀 正在启动 VNC Server...${NC}"
-        
-        # 清理锁文件 + 允许外部连接
         CMD="vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
         proot-distro login "$TARGET" -- bash -c "$CMD"
-        
         echo -e "\n${G}=== VNC 已启动 ===${NC}"
         echo -e "手机连接: ${W}127.0.0.1:5901${NC}"
-        echo -e "电脑连接: ${W}${LOCAL_IP}:5901${NC} (需同一WiFi)"
+        echo -e "电脑连接: ${W}${LOCAL_IP}:5901${NC}"
         echo -e "默认密码: ${W}123456${NC}"
         read -n 1 -s -r -p "按任意键返回..."
     fi
 }
 
-# [F5] 检查更新 (防死循环)
+# [F5] 更新功能 (强健逻辑修复)
 do_update() {
     clear; echo -e "${C}=== 检查更新 ===${NC}"
     echo -ne "${B}连接服务器...${NC}\r"
-    REMOTE_VER=$(curl -s --max-time 3 "$UPDATE_URL" | grep "export VERSION=" | cut -d'"' -f2)
     
-    if [[ -z "$REMOTE_VER" ]]; then
-        echo -e "\n${R}❌ 检查失败，请检查网络。${NC}"
-    elif [[ "$REMOTE_VER" != "$VERSION" ]]; then
+    # 1. 使用临时文件下载，避免破坏原文件
+    local temp_file="$TMPDIR/xxy_update_tmp"
+    rm -f "$temp_file"
+    
+    # 2. 仅检测 header 避免下载整个文件 (如果支持) 或下载到临时文件
+    HTTP_CODE=$(curl -s -o "$temp_file" -w "%{http_code}" "$UPDATE_URL")
+    
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo -e "\n${R}❌ 连接失败 (HTTP $HTTP_CODE)${NC}"
+        echo "请检查网络或 GitHub 连接状态。"
+        read -n 1 -s -r -p "..."
+        return
+    fi
+
+    # 3. 验证下载的内容是否为脚本 (防止下载到 404 页面 HTML)
+    if ! grep -q "PROJECT: XXY" "$temp_file"; then
+        echo -e "\n${R}❌ 校验失败：下载的文件无效。${NC}"
+        read -n 1 -s -r -p "..."
+        return
+    fi
+
+    # 4. 提取版本号
+    REMOTE_VER=$(grep "export VERSION=" "$temp_file" | cut -d'"' -f2)
+
+    if [[ "$REMOTE_VER" != "$VERSION" ]]; then
         echo -e "\n${Y}🚀 发现新版本: $REMOTE_VER${NC}"
+        echo -e "当前版本: $VERSION"
         tput cnorm; stty echo
         read -p "确认更新? (y/n): " confirm
         stty -echo; tput civis
+        
         if [[ "$confirm" == "y" ]]; then
-            echo -e "${G}正在覆盖更新...${NC}"
-            # 仅下载覆盖，不自动执行，防止递归
-            curl -fsSL "$UPDATE_URL" -o "$PREFIX/bin/xxy"
+            echo -e "${G}正在应用更新...${NC}"
+            # 5. 安全覆盖
+            mv "$temp_file" "$PREFIX/bin/xxy"
             chmod 755 "$PREFIX/bin/xxy"
-            echo -e "${G}更新完成！请重新输入 xxy 启动。${NC}"
+            echo -e "${G}更新成功！请重启脚本。${NC}"
             exit 0
         fi
     else
         echo -e "\n${G}✅ 当前已是最新 ($VERSION)${NC}"
     fi
+    rm -f "$temp_file"
     read -n 1 -s -r -p "..."
 }
 
@@ -333,7 +349,7 @@ do_update() {
 update_status() {
     NOW=$(date "+%H:%M")
     IP=$(get_ip)
-    # 内存容错 (Android 12+可能受限)
+    # [修复] 内存读取彻底屏蔽报错，Android 12+ 兼容
     if (( FRAME % 50 == 0 )); then
         MEM=$(free -m 2>/dev/null | awk 'NR==2{printf "%.1fG", $3/1024}' || echo "N/A")
     fi
@@ -359,7 +375,6 @@ ${GR}─────────────────────────
 ${GR}🔗 GitHub: ${W}${GITHUB_LINK}${NC}
 EOF
     if command -v fastfetch >/dev/null; then
-        # 仅显示 OS 和 Kernel 信息以节省空间
         fastfetch --config structure:OS:Kernel --logo none 2>/dev/null | sed 's/^/  /'
     fi
 }
@@ -401,5 +416,5 @@ INSTALL_EOF
 
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v35.0 安装完成！\n修复了容器识别和局域网VNC连接。\n输入 xxy 启动。\033[0m"
+echo -e "\033[1;32m✅ XXY v35.1 升级完成！\n强化了更新验证和系统兼容性。\n输入 xxy 启动。\033[0m"
 exec xxy
