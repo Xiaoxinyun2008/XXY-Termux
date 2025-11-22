@@ -1,16 +1,24 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# 📱 XXY v4.0 终极生产力工具箱
-# 整合：Shizuku自动修复 | Debian生产力环境 | VSCode | 二级菜单
+# 📱 XXY v32.0 终极生产力工具箱
+# 整合：Shizuku自动修复 | 多发行版支持 | VSCode | 二级菜单
 # ==============================================================================
 
 # --- [0] 全局配置 ---
 export PREFIX="/data/data/com.termux/files/usr"
 export HOME="/data/data/com.termux/files/home"
-export DISTRO_NAME="debian"
-export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
+export CONFIG_FILE="$HOME/.xxy_config"
 export TMP_WORKER="$PREFIX/tmp/worker_script.sh"
+
+# 读取上次使用的发行版，默认为 debian
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    export DISTRO_NAME="debian"
+fi
+
+export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
 
 # 颜色定义
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
@@ -23,42 +31,54 @@ trap 'echo -e "\n${G}[XXY] 已安全退出。${NC}"; exit 0' EXIT INT TERM
 # 🛠️ 核心模块：容器内部构建脚本 (Worker)
 # ==============================================================================
 create_worker_script() {
+    local target_distro="$1"
     mkdir -p "$PREFIX/tmp"
-    cat > "$TMP_WORKER" << 'EOF'
+    
+    cat > "$TMP_WORKER" << EOF
 #!/bin/bash
 set -e
 
-# [1] 换源 (清华源 Debian Bookworm)
-echo ">>> [内部] 正在配置国内源..."
-cat > /etc/apt/sources.list << SOURCES
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware
-SOURCES
+DISTRO="$target_distro"
+echo ">>> [内部] 正在配置国内源 (Distro: \$DISTRO)..."
 
-# [2] 更新并安装基础软件
-echo ">>> [内部] 正在安装桌面和生产力工具 (耗时较长)..."
-apt update -y
-export DEBIAN_FRONTEND=noninteractive
+# 智能换源
+if [[ "\$DISTRO" == "debian" ]]; then
+    sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+    sed -i 's/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+elif [[ "\$DISTRO" == "ubuntu" ]]; then
+    sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+    sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+elif [[ "\$DISTRO" == "kali" ]]; then
+    sed -i 's/http.kali.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+fi
 
-# 安装核心组件：桌面(XFCE)、浏览器(Firefox)、字体(Noto)、输入法(Fcitx5)、开发工具(Git/Python)
-apt install -y sudo nano wget curl git build-essential python3-full \
-    xfce4 xfce4-goodies xfce4-terminal dbus-x11 \
-    firefox-esr \
-    fonts-noto-cjk fonts-noto-color-emoji \
-    fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
-    im-config
+# 仅针对 APT 系统进行后续配置
+if [[ "\$DISTRO" == "debian" ]] || [[ "\$DISTRO" == "ubuntu" ]] || [[ "\$DISTRO" == "kali" ]]; then
+    echo ">>> [内部] 正在安装桌面和生产力工具 (耗时较长)..."
+    apt update -y
+    export DEBIAN_FRONTEND=noninteractive
 
-# [3] 中文环境配置
-echo ">>> [内部] 生成中文 Locale..."
-apt install -y locales
-sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
-locale-gen zh_CN.UTF-8
-update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
+    # 基础工具
+    apt install -y sudo nano wget curl git build-essential python3-full
 
-# [4] 环境变量 (修复输入法和显示)
-echo ">>> [内部] 配置环境变量..."
-cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
+    # 桌面环境 & 工具 (XFCE4)
+    apt install -y xfce4 xfce4-goodies xfce4-terminal dbus-x11 firefox-esr
+
+    # 字体 & 输入法
+    apt install -y fonts-noto-cjk fonts-noto-color-emoji \
+        fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
+        im-config
+
+    # 中文环境
+    echo ">>> [内部] 生成中文 Locale..."
+    apt install -y locales
+    sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
+    locale-gen zh_CN.UTF-8
+    update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
+
+    # 环境变量
+    echo ">>> [内部] 配置环境变量..."
+    cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
 export LANG=zh_CN.UTF-8
 export LC_ALL=zh_CN.UTF-8
 export GTK_IM_MODULE=fcitx
@@ -67,17 +87,20 @@ export XMODIFIERS=@im=fcitx
 export DISPLAY=:0
 export PULSE_SERVER=127.0.0.1
 ENV_EOF
-chmod +x /etc/profile.d/xxy_env.sh
+    chmod +x /etc/profile.d/xxy_env.sh
 
-# [5] 软件修复补丁
-echo ">>> [内部] 应用 Firefox/VSCode 防闪退补丁..."
-echo 'alias firefox="firefox-esr --no-remote"' >> /etc/bash.bashrc
-# 创建桌面快捷方式修复
-mkdir -p /usr/share/applications
-sed -i 's/Exec=firefox-esr %u/Exec=firefox-esr --no-remote %u/g' /usr/share/applications/firefox-esr.desktop 2>/dev/null || true
+    # 修复补丁
+    echo ">>> [内部] 应用 Firefox/VSCode 防闪退补丁..."
+    echo 'alias firefox="firefox-esr --no-remote"' >> /etc/bash.bashrc
+    mkdir -p /usr/share/applications
+    sed -i 's/Exec=firefox-esr %u/Exec=firefox-esr --no-remote %u/g' /usr/share/applications/firefox-esr.desktop 2>/dev/null || true
+    
+    apt autoremove -y; apt clean
+else
+    echo ">>> [内部] 检测到非 Debian/Ubuntu/Kali 系统..."
+    echo ">>> [内部] 已跳过自动化桌面环境配置，请手动安装。"
+fi
 
-# [6] 清理
-apt autoremove -y; apt clean
 echo ">>> [内部] 环境构建完成！"
 EOF
     chmod +x "$TMP_WORKER"
@@ -90,6 +113,12 @@ EOF
 log() { echo -e "${G}[XXY] $1${NC}"; }
 warn() { echo -e "${Y}[提示] $1${NC}"; }
 err() { echo -e "${R}[错误] $1${NC}"; }
+
+# 保存配置
+save_config() {
+    echo "DISTRO_NAME=\"$DISTRO_NAME\"" > "$CONFIG_FILE"
+    export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
+}
 
 # --- 自动检测并修复 Shizuku 环境 ---
 auto_fix_shizuku() {
@@ -120,27 +149,66 @@ auto_fix_shizuku() {
 
 # --- 安装系统 ---
 install_system() {
+    while true; do
+        clear
+        echo -e "${B}┌── [选择发行版] ────────────┐${NC}"
+        echo -e "1. ${G}Debian${NC} (推荐，稳定)"
+        echo -e "2. ${C}Ubuntu${NC} (流行，软件多)"
+        echo -e "3. ${R}Kali${NC}   (安全测试)"
+        echo -e "4. Arch Linux (仅基础安装)"
+        echo -e "5. Alpine     (轻量级)"
+        echo -e "0. 返回"
+        echo -e "${B}└────────────────────────────┘${NC}"
+        read -p "👉 请选择: " dist_opt
+        
+        case "$dist_opt" in
+            1) NEW_DISTRO="debian" ;;
+            2) NEW_DISTRO="ubuntu" ;;
+            3) NEW_DISTRO="kali" ;;
+            4) NEW_DISTRO="archlinux" ;;
+            5) NEW_DISTRO="alpine" ;;
+            0) return ;;
+            *) continue ;;
+        esac
+        break
+    done
+
+    DISTRO_NAME="$NEW_DISTRO"
+    save_config
+    
     clear
-    log "=== 安装 Debian 生产力系统 ==="
+    log "=== 正在安装 $DISTRO_NAME ==="
     # 检查依赖
     pkg install proot-distro pulseaudio termux-x11-nightly virglrenderer-android android-tools -y -o Dpkg::Options::="--force-confnew"
 
     if [ -d "$ROOTFS" ]; then
-        read -p "系统已存在，是否删除重装? (y/n): " opt
+        read -p "检测到系统已存在，是否删除重装? (y/n): " opt
         if [ "$opt" != "y" ]; then return; fi
         proot-distro remove "$DISTRO_NAME"
     fi
 
-    log "正在下载系统 (请保持网络畅通)..."
+    log "正在下载系统镜像 (请保持网络畅通)..."
     rm -rf "$PREFIX/var/lib/proot-distro/dlcache/$DISTRO_NAME"
     
     if proot-distro install "$DISTRO_NAME"; then
-        echo "nameserver 223.5.5.5" > "$ROOTFS/etc/resolv.conf"
-        create_worker_script
-        log "正在进入容器配置环境 (Firefox/中文/桌面)..."
-        proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$TMP_WORKER"
+        # 写入 DNS
+        if [ -f "$ROOTFS/etc/resolv.conf" ]; then
+            echo "nameserver 223.5.5.5" > "$ROOTFS/etc/resolv.conf"
+        fi
+
+        create_worker_script "$DISTRO_NAME"
+        
+        log "正在进入容器进行配置..."
+        # 只有 apt 类系统才执行完整 worker
+        if [[ "$DISTRO_NAME" =~ ^(debian|ubuntu|kali)$ ]]; then
+             proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$TMP_WORKER"
+        else
+             # 对于其他系统，只做简单提示或执行基础配置
+             proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/sh "$TMP_WORKER"
+        fi
+        
         rm -f "$TMP_WORKER"
-        log "🎉 系统安装完成！"
+        log "🎉 系统安装完成！当前选择: $DISTRO_NAME"
     else
         err "下载失败。请开启 VPN 或检查网络。"
     fi
@@ -150,6 +218,12 @@ install_system() {
 # --- 安装 VSCode ---
 install_vscode() {
     if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
+    if [[ ! "$DISTRO_NAME" =~ ^(debian|ubuntu|kali)$ ]]; then
+        err "VSCode 一键安装目前仅支持 Debian/Ubuntu/Kali。"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
     log "正在下载并安装 VSCode (ARM64)..."
     
     # 注入安装脚本到容器
@@ -164,6 +238,7 @@ rm code.deb
 # 修复启动
 echo ">>> [内部] 修复启动参数..."
 echo 'alias code="code --no-sandbox --unity-launch"' >> /etc/bash.bashrc
+mkdir -p /usr/share/applications
 sed -i 's/Exec=\/usr\/share\/code\/code/Exec=\/usr\/share\/code\/code --no-sandbox/g' /usr/share/applications/code.desktop 2>/dev/null || true
 echo "✅ VSCode 安装完成。"
 EOF
@@ -175,7 +250,7 @@ EOF
 start_desktop() {
     if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
     clear
-    log "🚀 正在启动生产力桌面..."
+    log "🚀 正在启动 $DISTRO_NAME 桌面环境..."
     
     # 清理 & 启动服务
     killall -9 termux-x11 Xwayland pulseaudio virgl_test_server_android >/dev/null 2>&1
@@ -198,8 +273,18 @@ start_desktop() {
     proot-distro login "$DISTRO_NAME" --shared-tmp -- bash -c "
         export DISPLAY=:0
         export PULSE_SERVER=127.0.0.1
-        fcitx5 -d &
-        dbus-launch --exit-with-session startxfce4
+        # 尝试启动输入法 (仅限配置过的系统)
+        if command -v fcitx5 >/dev/null; then
+             fcitx5 -d &
+        fi
+        
+        # 启动桌面
+        if command -v startxfce4 >/dev/null; then
+            dbus-launch --exit-with-session startxfce4
+        else
+            echo '❌ 未检测到桌面环境，进入命令行模式...'
+            bash
+        fi
     "
 }
 
@@ -212,9 +297,9 @@ menu_install() {
     while true; do
         clear
         echo -e "${B}┌── [安装管理] ──────────────┐${NC}"
-        echo -e "1. ${G}一键安装 Debian 生产力版${NC} (含中文/桌面/浏览器)"
-        echo -e "2. ${C}安装 VSCode${NC} (需先装系统)"
-        echo -e "3. 卸载系统"
+        echo -e "1. ${G}安装新系统${NC} (支持 Deb/Ubt/Kali等)"
+        echo -e "2. ${C}安装 VSCode${NC} (需 Debian/Ubuntu)"
+        echo -e "3. 卸载当前系统 ($DISTRO_NAME)"
         echo -e "0. 返回上一级"
         echo -e "${B}└────────────────────────────┘${NC}"
         read -p "👉 选择: " sub_opt
@@ -222,7 +307,7 @@ menu_install() {
             1) install_system ;;
             2) install_vscode ;;
             3) 
-               read -p "确定删除吗? (y/n): " del_conf
+               read -p "确定删除 $DISTRO_NAME 吗? (y/n): " del_conf
                if [ "$del_conf" == "y" ]; then proot-distro remove "$DISTRO_NAME"; fi ;;
             0) return ;;
         esac
@@ -243,7 +328,18 @@ menu_maintenance() {
         case "$sub_opt" in
             1) auto_fix_shizuku ;;
             2) rm -rf "$PREFIX/var/lib/proot-distro/dlcache"; log "已清理。"; sleep 1 ;;
-            3) log "暂未开放"; sleep 1 ;;
+            3) 
+               log "正在备份 $DISTRO_NAME ..."
+               mkdir -p "$HOME/xxy_backups"
+               TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+               BACKUP_FILE="$HOME/xxy_backups/${DISTRO_NAME}_backup_${TIMESTAMP}.tar.gz"
+               if proot-distro backup "$DISTRO_NAME" --output "$BACKUP_FILE"; then
+                   log "✅ 备份成功！文件已保存至: $BACKUP_FILE"
+               else
+                   err "❌ 备份失败。系统可能未安装。"
+               fi
+               read -n 1 -s -r -p "按任意键返回..."
+               ;;
             0) return ;;
         esac
     done
@@ -257,9 +353,15 @@ main_menu() {
     while true; do
         clear
         echo -e "${B}┌────────────────────────────────────────┐${NC}"
-        echo -e "${B}│         XXY v4.0 终极生产力工具箱      │${NC}"
+        echo -e "${B}│         XXY v32.0 终极生产力工具箱      │${NC}"
         echo -e "${B}└────────────────────────────────────────┘${NC}"
-        echo -e "当前状态: $(if [ -d "$ROOTFS" ]; then echo "${G}Debian 已就绪${NC}"; else echo "${R}未安装系统${NC}"; fi)"
+        
+        STATUS_MSG="${R}未安装系统${NC}"
+        if [ -d "$ROOTFS" ]; then
+             STATUS_MSG="${G}$DISTRO_NAME 已就绪${NC}"
+        fi
+        
+        echo -e "当前状态: $STATUS_MSG"
         echo ""
         echo -e "1. ${G}🚀 启动桌面环境${NC} (日常使用点这个)"
         echo -e "2. 💿 安装/管理系统 (二级菜单)"
