@@ -1,278 +1,751 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# 📱 XXY v4.0 终极生产力工具箱
-# 整合：Shizuku自动修复 | Debian生产力环境 | VSCode | 二级菜单
+# 📱 XXY v32.0 - Termux 通用容器管理器
+# AI 优化版本 - 专注于稳定性、流畅度与安全性
 # ==============================================================================
 
 # --- [0] 全局配置 ---
 export PREFIX="/data/data/com.termux/files/usr"
 export HOME="/data/data/com.termux/files/home"
-export DISTRO_NAME="debian"
-export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
-export TMP_WORKER="$PREFIX/tmp/worker_script.sh"
+export VERSION="32.0"
+export TMP_DIR="$PREFIX/tmp/xxy_$$"
+export WORKER_SCRIPT="$TMP_DIR/worker.sh"
+
+# 支持的发行版
+declare -A DISTRO_NAMES=(
+    [1]="ubuntu"
+    [2]="debian"
+    [3]="kali"
+    [4]="archlinux"
+    [5]="alpine"
+)
 
 # 颜色定义
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); NC=$(tput sgr0)
 
-# 信号捕获
-trap 'echo -e "\n${G}[XXY] 已安全退出。${NC}"; exit 0' EXIT INT TERM
+# 终端状态保存
+SAVED_STTY=$(stty -g 2>/dev/null || echo "")
 
 # ==============================================================================
-# 🛠️ 核心模块：容器内部构建脚本 (Worker)
+# 🛡️ 安全核心：自动恢复机制
+# ==============================================================================
+safe_exit() {
+    # 恢复终端设置
+    if [ -n "$SAVED_STTY" ]; then
+        stty "$SAVED_STTY" 2>/dev/null || true
+    fi
+    # 恢复光标和回显
+    tput cnorm 2>/dev/null || true
+    stty echo 2>/dev/null || true
+    # 清理临时文件
+    cleanup_temp_files
+    echo -e "\n${G}[XXY] 已安全退出。${NC}"
+    exit 0
+}
+
+cleanup_temp_files() {
+    rm -rf "$TMP_DIR" 2>/dev/null || true
+    rm -f "$PREFIX/tmp/worker_*.sh" 2>/dev/null || true
+}
+
+# 信号捕获 - 自动恢复
+trap 'safe_exit' EXIT INT TERM
+
+# 初始化时确保终端正常
+tput cnorm 2>/dev/null || true
+stty echo 2>/dev/null || true
+
+# ==============================================================================
+# 🔧 工具函数
+# ==============================================================================
+log() { printf "${G}[XXY] %s${NC}\n" "$1"; }
+warn() { printf "${Y}[提示] %s${NC}\n" "$1"; }
+err() { printf "${R}[错误] %s${NC}\n" "$1"; }
+
+# 检查命令是否存在
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# 获取已安装的系统列表
+get_installed_distros() {
+    proot-distro list 2>/dev/null | grep -E "^\s" | awk '{print $1}' | grep -v "^$" || echo ""
+}
+
+# 检查系统是否已安装
+is_distro_installed() {
+    local distro=$1
+    [ -d "$PREFIX/var/lib/proot-distro/installed-rootfs/$distro" ]
+}
+
+# ==============================================================================
+# 🛠️ 核心模块：创建系统配置脚本
 # ==============================================================================
 create_worker_script() {
-    mkdir -p "$PREFIX/tmp"
-    cat > "$TMP_WORKER" << 'EOF'
+    local distro=$1
+    mkdir -p "$TMP_DIR"
+    
+    case "$distro" in
+        debian|ubuntu)
+            cat > "$WORKER_SCRIPT" << 'DEBIAN_EOF'
 #!/bin/bash
 set -e
 
-# [1] 换源 (清华源 Debian Bookworm)
 echo ">>> [内部] 正在配置国内源..."
-cat > /etc/apt/sources.list << SOURCES
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware
-SOURCES
+# 检测 Debian/Ubuntu 版本
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    CODENAME=$(echo $VERSION_CODENAME | tr '[:upper:]' '[:lower:]')
+else
+    CODENAME="bookworm"
+fi
 
-# [2] 更新并安装基础软件
-echo ">>> [内部] 正在安装桌面和生产力工具 (耗时较长)..."
+# Debian 源配置
+if [ "$ID" = "debian" ]; then
+    cat > /etc/apt/sources.list << SOURCES
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ $CODENAME main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ $CODENAME-updates main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian-security $CODENAME-security main contrib non-free non-free-firmware
+SOURCES
+# Ubuntu 源配置
+elif [ "$ID" = "ubuntu" ]; then
+    cat > /etc/apt/sources.list << SOURCES
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $CODENAME main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $CODENAME-updates main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $CODENAME-security main restricted universe multiverse
+SOURCES
+fi
+
+echo ">>> [内部] 更新软件包列表..."
 apt update -y
 export DEBIAN_FRONTEND=noninteractive
 
-# 安装核心组件：桌面(XFCE)、浏览器(Firefox)、字体(Noto)、输入法(Fcitx5)、开发工具(Git/Python)
-apt install -y sudo nano wget curl git build-essential python3-full \
-    xfce4 xfce4-goodies xfce4-terminal dbus-x11 \
-    firefox-esr \
-    fonts-noto-cjk fonts-noto-color-emoji \
-    fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
-    im-config
+echo ">>> [内部] 安装基础工具和中文支持..."
+apt install -y sudo nano wget curl git locales \
+    fonts-noto-cjk fonts-noto-color-emoji
 
-# [3] 中文环境配置
-echo ">>> [内部] 生成中文 Locale..."
-apt install -y locales
+echo ">>> [内部] 配置中文环境..."
 sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen zh_CN.UTF-8
 update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
 
-# [4] 环境变量 (修复输入法和显示)
 echo ">>> [内部] 配置环境变量..."
 cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
 export LANG=zh_CN.UTF-8
 export LC_ALL=zh_CN.UTF-8
-export GTK_IM_MODULE=fcitx
-export QT_IM_MODULE=fcitx
-export XMODIFIERS=@im=fcitx
 export DISPLAY=:0
 export PULSE_SERVER=127.0.0.1
 ENV_EOF
 chmod +x /etc/profile.d/xxy_env.sh
 
-# [5] 软件修复补丁
-echo ">>> [内部] 应用 Firefox/VSCode 防闪退补丁..."
-echo 'alias firefox="firefox-esr --no-remote"' >> /etc/bash.bashrc
-# 创建桌面快捷方式修复
-mkdir -p /usr/share/applications
-sed -i 's/Exec=firefox-esr %u/Exec=firefox-esr --no-remote %u/g' /usr/share/applications/firefox-esr.desktop 2>/dev/null || true
+echo ">>> [内部] 清理缓存..."
+apt autoremove -y 2>/dev/null || true
+apt clean 2>/dev/null || true
 
-# [6] 清理
-apt autoremove -y; apt clean
-echo ">>> [内部] 环境构建完成！"
-EOF
-    chmod +x "$TMP_WORKER"
+echo ">>> [内部] 配置完成！"
+DEBIAN_EOF
+            ;;
+        kali)
+            cat > "$WORKER_SCRIPT" << 'KALI_EOF'
+#!/bin/bash
+set -e
+
+echo ">>> [内部] 配置 Kali 源..."
+cat > /etc/apt/sources.list << SOURCES
+deb https://mirrors.tuna.tsinghua.edu.cn/kali kali-rolling main contrib non-free non-free-firmware
+SOURCES
+
+apt update -y
+export DEBIAN_FRONTEND=noninteractive
+
+apt install -y sudo nano wget curl git locales \
+    fonts-noto-cjk fonts-noto-color-emoji
+
+sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen zh_CN.UTF-8
+update-locale LANG=zh_CN.UTF-8
+
+cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
+export LANG=zh_CN.UTF-8
+export LC_ALL=zh_CN.UTF-8
+export DISPLAY=:0
+export PULSE_SERVER=127.0.0.1
+ENV_EOF
+chmod +x /etc/profile.d/xxy_env.sh
+
+apt autoremove -y 2>/dev/null || true
+apt clean 2>/dev/null || true
+KALI_EOF
+            ;;
+        archlinux)
+            cat > "$WORKER_SCRIPT" << 'ARCH_EOF'
+#!/bin/bash
+set -e
+
+echo ">>> [内部] 配置 Arch Linux 源..."
+sed -i 's|^#Server|Server|' /etc/pacman.d/mirrorlist
+sed -i 's|Server = https://mirror.archlinuxarm.org|Server = https://mirrors.tuna.tsinghua.edu.cn/archlinuxarm|' /etc/pacman.d/mirrorlist
+
+echo ">>> [内部] 更新系统..."
+pacman -Syu --noconfirm
+
+echo ">>> [内部] 安装基础工具..."
+pacman -S --noconfirm sudo nano wget curl git \
+    noto-fonts-cjk noto-fonts-emoji
+
+echo ">>> [内部] 配置中文环境..."
+echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+
+cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
+export LANG=zh_CN.UTF-8
+export LC_ALL=zh_CN.UTF-8
+export DISPLAY=:0
+export PULSE_SERVER=127.0.0.1
+ENV_EOF
+chmod +x /etc/profile.d/xxy_env.sh
+
+pacman -Sc --noconfirm 2>/dev/null || true
+ARCH_EOF
+            ;;
+        alpine)
+            cat > "$WORKER_SCRIPT" << 'ALPINE_EOF'
+#!/bin/bash
+set -e
+
+echo ">>> [内部] 配置 Alpine 源..."
+cat > /etc/apk/repositories << REPOS
+https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.19/main
+https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.19/community
+REPOS
+
+apk update
+apk add sudo nano wget curl git \
+    font-noto-cjk font-noto-emoji
+
+echo ">>> [内部] 配置中文环境..."
+cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
+export LANG=zh_CN.UTF-8
+export LC_ALL=zh_CN.UTF-8
+export DISPLAY=:0
+export PULSE_SERVER=127.0.0.1
+ENV_EOF
+chmod +x /etc/profile.d/xxy_env.sh
+ALPINE_EOF
+            ;;
+    esac
+    
+    chmod +x "$WORKER_SCRIPT"
+}
+
+# ==============================================================================
+# 🎨 自动美化：配置 neofetch
+# ==============================================================================
+setup_neofetch() {
+    local distro=$1
+    local rootfs="$PREFIX/var/lib/proot-distro/installed-rootfs/$distro"
+    
+    # 移除旧的 neofetch 配置
+    rm -f "$rootfs/etc/neofetch/config.conf" 2>/dev/null || true
+    rm -f "$rootfs/root/.config/neofetch/config.conf" 2>/dev/null || true
+    
+    # 创建简洁的启动信息脚本
+    cat > "$rootfs/etc/profile.d/xxy_welcome.sh" << 'WELCOME_EOF'
+#!/bin/bash
+if [ -t 0 ] && [ "$PS1" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  🐧 Linux 容器环境"
+    echo "  📦 $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)"
+    echo "  💻 $(uname -m)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+fi
+WELCOME_EOF
+    chmod +x "$rootfs/etc/profile.d/xxy_welcome.sh" 2>/dev/null || true
 }
 
 # ==============================================================================
 # 🔧 功能函数
 # ==============================================================================
 
-log() { echo -e "${G}[XXY] $1${NC}"; }
-warn() { echo -e "${Y}[提示] $1${NC}"; }
-err() { echo -e "${R}[错误] $1${NC}"; }
-
-# --- 自动检测并修复 Shizuku 环境 ---
-auto_fix_shizuku() {
-    log "正在检查 Shizuku 环境..."
-    
-    # 1. 检查文件是否存在，不存在则下载 (使用国内源)
-    if [ ! -f "$PREFIX/bin/rish" ] || [ ! -f "$PREFIX/bin/rish_shizuku.dex" ]; then
-        echo -e "${Y}>>> 正在下载 rish 组件 (国内高速镜像)...${NC}"
-        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish" -o $PREFIX/bin/rish
-        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish_shizuku.dex" -o $PREFIX/bin/rish_shizuku.dex
-        chmod +x $PREFIX/bin/rish
+# --- 系统登录 ---
+login_system() {
+    local installed=$(get_installed_distros)
+    if [ -z "$installed" ]; then
+        err "没有已安装的系统！请先安装一个系统。"
+        sleep 2
+        return
     fi
-
-    # 2. 尝试执行
-    log "正在尝试通过 Shizuku 解除进程限制..."
-    echo -e "${Y}⚠️  注意：如果 Shizuku 弹出授权窗口，请务必点击【始终允许】！${NC}"
     
-    if $PREFIX/bin/rish -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647 && cmd appops set com.termux RUN_IN_BACKGROUND allow" 2>/dev/null; then
-        echo -e "${G}✅ 修复成功！Termux 已获得免死金牌。${NC}"
-        read -n 1 -s -r -p "按任意键继续..."
-    else
-        echo -e "${R}❌ 授权失败。${NC}"
-        echo "可能原因：Shizuku 未启动，或未授权。"
-        echo "请确保 Shizuku APP 正在运行，然后再试一次。"
-        read -n 1 -s -r -p "按任意键返回..."
+    clear
+    echo -e "${B}┌── [登录系统] ──────────────┐${NC}"
+    echo -e "${G}已安装的系统：${NC}"
+    
+    local i=1
+    local distros=()
+    while IFS= read -r distro; do
+        if [ -n "$distro" ]; then
+            echo -e "  $i. ${C}$distro${NC}"
+            distros+=("$distro")
+            ((i++))
+        fi
+    done <<< "$installed"
+    
+    echo -e "  0. 返回"
+    echo -e "${B}└────────────────────────────┘${NC}"
+    read -p "👉 选择系统: " choice
+    
+    if [ "$choice" = "0" ] || [ -z "$choice" ]; then
+        return
     fi
+    
+    local selected_distro="${distros[$((choice-1))]}"
+    if [ -z "$selected_distro" ]; then
+        err "无效的选择！"
+        sleep 1
+        return
+    fi
+    
+    # 应用美化
+    setup_neofetch "$selected_distro"
+    
+    log "正在登录 $selected_distro..."
+    proot-distro login "$selected_distro" --shared-tmp
 }
 
 # --- 安装系统 ---
 install_system() {
     clear
-    log "=== 安装 Debian 生产力系统 ==="
-    # 检查依赖
-    pkg install proot-distro pulseaudio termux-x11-nightly virglrenderer-android android-tools -y -o Dpkg::Options::="--force-confnew"
-
-    if [ -d "$ROOTFS" ]; then
-        read -p "系统已存在，是否删除重装? (y/n): " opt
-        if [ "$opt" != "y" ]; then return; fi
-        proot-distro remove "$DISTRO_NAME"
-    fi
-
-    log "正在下载系统 (请保持网络畅通)..."
-    rm -rf "$PREFIX/var/lib/proot-distro/dlcache/$DISTRO_NAME"
+    echo -e "${B}┌── [安装新系统] ──────────────┐${NC}"
+    echo -e "1. ${G}Ubuntu${NC}"
+    echo -e "2. ${G}Debian${NC}"
+    echo -e "3. ${G}Kali Linux${NC}"
+    echo -e "4. ${G}Arch Linux${NC}"
+    echo -e "5. ${G}Alpine${NC}"
+    echo -e "0. 返回"
+    echo -e "${B}└────────────────────────────┘${NC}"
+    read -p "👉 选择系统: " choice
     
-    if proot-distro install "$DISTRO_NAME"; then
-        echo "nameserver 223.5.5.5" > "$ROOTFS/etc/resolv.conf"
-        create_worker_script
-        log "正在进入容器配置环境 (Firefox/中文/桌面)..."
-        proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$TMP_WORKER"
-        rm -f "$TMP_WORKER"
+    if [ "$choice" = "0" ] || [ -z "$choice" ] || [ "$choice" -lt 1 ] || [ "$choice" -gt 5 ]; then
+        return
+    fi
+    
+    local distro="${DISTRO_NAMES[$choice]}"
+    local rootfs="$PREFIX/var/lib/proot-distro/installed-rootfs/$distro"
+    
+    # 检查是否已安装
+    if is_distro_installed "$distro"; then
+        warn "系统 $distro 已安装！"
+        read -p "是否删除重装? (y/n): " opt
+        if [ "$opt" != "y" ] && [ "$opt" != "Y" ]; then
+            return
+        fi
+        proot-distro remove "$distro" 2>/dev/null || true
+    fi
+    
+    # 检查依赖
+    if ! command_exists proot-distro; then
+        log "正在安装 proot-distro..."
+        pkg install proot-distro -y || {
+            err "安装 proot-distro 失败！"
+            sleep 2
+            return
+        }
+    fi
+    
+    log "正在下载 $distro (请保持网络畅通，可能需要几分钟)..."
+    rm -rf "$PREFIX/var/lib/proot-distro/dlcache/$distro" 2>/dev/null || true
+    
+    if proot-distro install "$distro" 2>&1; then
+        # 配置 DNS
+        echo "nameserver 223.5.5.5" > "$rootfs/etc/resolv.conf" 2>/dev/null || true
+        echo "nameserver 8.8.8.8" >> "$rootfs/etc/resolv.conf" 2>/dev/null || true
+        
+        # 创建并执行配置脚本
+        create_worker_script "$distro"
+        log "正在配置系统环境 (中文/字体/源)..."
+        proot-distro login "$distro" --shared-tmp -- /bin/bash "$WORKER_SCRIPT" 2>&1
+        
+        # 应用美化
+        setup_neofetch "$distro"
+        
+        # 清理临时文件
+        cleanup_temp_files
+        
         log "🎉 系统安装完成！"
     else
-        err "下载失败。请开启 VPN 或检查网络。"
+        err "安装失败！请检查网络连接或稍后重试。"
+        cleanup_temp_files
     fi
-    read -n 1 -s -r -p "按任意键返回..."
-}
-
-# --- 安装 VSCode ---
-install_vscode() {
-    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
-    log "正在下载并安装 VSCode (ARM64)..."
     
-    # 注入安装脚本到容器
-    cat > "$PREFIX/tmp/vscode_inst.sh" << 'EOF'
-#!/bin/bash
-cd /tmp
-echo ">>> [内部] 下载 VSCode.deb..."
-wget -O code.deb "https://update.code.visualstudio.com/latest/linux-deb-arm64/stable"
-echo ">>> [内部] 安装中..."
-apt install -y ./code.deb
-rm code.deb
-# 修复启动
-echo ">>> [内部] 修复启动参数..."
-echo 'alias code="code --no-sandbox --unity-launch"' >> /etc/bash.bashrc
-sed -i 's/Exec=\/usr\/share\/code\/code/Exec=\/usr\/share\/code\/code --no-sandbox/g' /usr/share/applications/code.desktop 2>/dev/null || true
-echo "✅ VSCode 安装完成。"
-EOF
-    proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$PREFIX/tmp/vscode_inst.sh"
     read -n 1 -s -r -p "按任意键返回..."
 }
 
-# --- 启动桌面 ---
-start_desktop() {
-    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
+# --- 启动 GUI 模式 ---
+start_gui() {
+    local installed=$(get_installed_distros)
+    if [ -z "$installed" ]; then
+        err "没有已安装的系统！请先安装一个系统。"
+        sleep 2
+        return
+    fi
+    
     clear
-    log "🚀 正在启动生产力桌面..."
+    echo -e "${B}┌── [GUI 模式] ──────────────┐${NC}"
+    echo -e "${G}已安装的系统：${NC}"
     
-    # 清理 & 启动服务
-    killall -9 termux-x11 Xwayland pulseaudio virgl_test_server_android >/dev/null 2>&1
-    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
+    local i=1
+    local distros=()
+    while IFS= read -r distro; do
+        if [ -n "$distro" ]; then
+            echo -e "  $i. ${C}$distro${NC}"
+            distros+=("$distro")
+            ((i++))
+        fi
+    done <<< "$installed"
     
-    termux-x11 :0 -ac &
+    echo -e "  0. 返回"
+    echo -e "${B}└────────────────────────────┘${NC}"
+    read -p "👉 选择系统: " choice
+    
+    if [ "$choice" = "0" ] || [ -z "$choice" ]; then
+        return
+    fi
+    
+    local selected_distro="${distros[$((choice-1))]}"
+    if [ -z "$selected_distro" ]; then
+        err "无效的选择！"
+        sleep 1
+        return
+    fi
+    
+    clear
+    echo -e "${B}┌── [GUI 模式选择] ──────────────┐${NC}"
+    echo -e "1. ${G}Termux:X11${NC} (推荐，硬件加速)"
+    echo -e "2. ${C}VNC Viewer${NC} (通用兼容)"
+    echo -e "0. 返回"
+    echo -e "${B}└────────────────────────────┘${NC}"
+    read -p "👉 选择模式: " gui_mode
+    
+    case "$gui_mode" in
+        1)
+            start_termux_x11 "$selected_distro"
+            ;;
+        2)
+            start_vnc "$selected_distro"
+            ;;
+        0|*)
+            return
+            ;;
+    esac
+}
+
+# --- Termux:X11 模式 ---
+start_termux_x11() {
+    local distro=$1
+    
+    # 检查依赖
+    if ! command_exists termux-x11; then
+        log "正在安装 Termux:X11..."
+        pkg install x11-repo -y
+        pkg install termux-x11-nightly -y || {
+            err "安装失败！请确保已安装 Termux:X11 APP。"
+            sleep 2
+            return
+        }
+    fi
+    
+    # 检查 GUI 是否已安装
+    proot-distro login "$distro" --shared-tmp -- bash -c "command -v startxfce4 >/dev/null 2>&1" || {
+        warn "未检测到桌面环境，正在安装 XFCE4..."
+        install_desktop_environment "$distro" || {
+            err "桌面环境安装失败！"
+            sleep 2
+            return
+        }
+    }
+    
+    log "正在启动 Termux:X11 模式..."
+    
+    # 清理旧进程
+    killall -9 termux-x11 Xwayland pulseaudio virgl_test_server_android >/dev/null 2>&1 || true
+    
+    # 启动 Termux:X11 APP
+    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || {
+        warn "无法自动启动 Termux:X11 APP，请手动打开。"
+    }
+    
+    sleep 1
+    
+    # 启动 X11 服务器
+    termux-x11 :0 -ac >/dev/null 2>&1 &
+    local x11_pid=$!
     
     # 等待 X11 准备就绪
     local count=0
-    while [ ! -S "$PREFIX/tmp/.X11-unix/X0" ]; do
-        sleep 0.2
-        count=$((count+1))
-        if [ $count -gt 30 ]; then err "Termux:X11 启动失败，请检查是否安装了 APP"; return; fi
+    while [ ! -S "$PREFIX/tmp/.X11-unix/X0" ] && [ $count -lt 50 ]; do
+        sleep 0.1
+        ((count++))
     done
     
-    virgl_test_server_android &
-    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+    if [ ! -S "$PREFIX/tmp/.X11-unix/X0" ]; then
+        kill $x11_pid 2>/dev/null || true
+        err "Termux:X11 启动失败！请检查是否安装了 Termux:X11 APP。"
+        sleep 2
+        return
+    fi
     
-    log "正在登入系统..."
-    proot-distro login "$DISTRO_NAME" --shared-tmp -- bash -c "
+    # 启动音频和图形加速
+    if command_exists virgl_test_server_android; then
+        virgl_test_server_android >/dev/null 2>&1 &
+    fi
+    
+    if command_exists pulseaudio; then
+        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1 >/dev/null 2>&1 || true
+    fi
+    
+    log "正在登录系统并启动桌面..."
+    proot-distro login "$distro" --shared-tmp -- bash -c "
         export DISPLAY=:0
         export PULSE_SERVER=127.0.0.1
-        fcitx5 -d &
         dbus-launch --exit-with-session startxfce4
     "
 }
 
-# ==============================================================================
-# 📺 菜单系统 (二级菜单设计)
-# ==============================================================================
-
-# 二级菜单：安装管理
-menu_install() {
-    while true; do
-        clear
-        echo -e "${B}┌── [安装管理] ──────────────┐${NC}"
-        echo -e "1. ${G}一键安装 Debian 生产力版${NC} (含中文/桌面/浏览器)"
-        echo -e "2. ${C}安装 VSCode${NC} (需先装系统)"
-        echo -e "3. 卸载系统"
-        echo -e "0. 返回上一级"
-        echo -e "${B}└────────────────────────────┘${NC}"
-        read -p "👉 选择: " sub_opt
-        case "$sub_opt" in
-            1) install_system ;;
-            2) install_vscode ;;
-            3) 
-               read -p "确定删除吗? (y/n): " del_conf
-               if [ "$del_conf" == "y" ]; then proot-distro remove "$DISTRO_NAME"; fi ;;
-            0) return ;;
-        esac
-    done
+# --- VNC 模式 ---
+start_vnc() {
+    local distro=$1
+    
+    # 检查 GUI 是否已安装
+    proot-distro login "$distro" --shared-tmp -- bash -c "command -v startxfce4 >/dev/null 2>&1" || {
+        warn "未检测到桌面环境，正在安装 XFCE4..."
+        install_desktop_environment "$distro" || {
+            err "桌面环境安装失败！"
+            sleep 2
+            return
+        }
+    }
+    
+    # 检查并安装 VNC
+    proot-distro login "$distro" --shared-tmp -- bash -c "command -v vncserver >/dev/null 2>&1" || {
+        log "正在安装 VNC 服务器..."
+        install_vnc_server "$distro" || {
+            err "VNC 服务器安装失败！"
+            sleep 2
+            return
+        }
+    }
+    
+    log "正在启动 VNC 服务器..."
+    log "连接地址: ${G}127.0.0.1:5901${NC}"
+    log "密码: ${Y}xterm${NC} (可在容器内使用 vncpasswd 修改)"
+    
+    proot-distro login "$distro" --shared-tmp -- bash -c "
+        export DISPLAY=:1
+        vncserver -kill :1 >/dev/null 2>&1 || true
+        vncserver :1 -geometry 1280x720 -depth 24
+        dbus-launch --exit-with-session startxfce4
+    " &
+    
+    log "VNC 服务器已启动！请使用 VNC Viewer 连接到 127.0.0.1:5901"
+    read -n 1 -s -r -p "按任意键停止 VNC 服务器..."
+    
+    proot-distro login "$distro" --shared-tmp -- bash -c "vncserver -kill :1" 2>/dev/null || true
 }
 
-# 二级菜单：维护工具
-menu_maintenance() {
-    while true; do
-        clear
-        echo -e "${B}┌── [维护工具] ──────────────┐${NC}"
-        echo -e "1. ${Y}Shizuku 防闪退修复${NC} (全自动)"
-        echo -e "2. 清理下载缓存 (修复安装失败)"
-        echo -e "3. 备份系统 (打包为 tar.gz)"
-        echo -e "0. 返回上一级"
-        echo -e "${B}└────────────────────────────┘${NC}"
-        read -p "👉 选择: " sub_opt
-        case "$sub_opt" in
-            1) auto_fix_shizuku ;;
-            2) rm -rf "$PREFIX/var/lib/proot-distro/dlcache"; log "已清理。"; sleep 1 ;;
-            3) log "暂未开放"; sleep 1 ;;
-            0) return ;;
-        esac
-    done
+# --- 安装桌面环境 ---
+install_desktop_environment() {
+    local distro=$1
+    
+    case "$distro" in
+        debian|ubuntu|kali)
+            proot-distro login "$distro" --shared-tmp -- bash -c "
+                export DEBIAN_FRONTEND=noninteractive
+                apt update -y
+                apt install -y xfce4 xfce4-goodies dbus-x11
+            " || return 1
+            ;;
+        archlinux)
+            proot-distro login "$distro" --shared-tmp -- bash -c "
+                pacman -Syu --noconfirm
+                pacman -S --noconfirm xfce4 xfce4-goodies dbus
+            " || return 1
+            ;;
+        alpine)
+            proot-distro login "$distro" --shared-tmp -- bash -c "
+                apk update
+                apk add xfce4 xfce4-terminal dbus
+            " || return 1
+            ;;
+    esac
 }
 
-# 主菜单
+# --- 安装 VNC 服务器 ---
+install_vnc_server() {
+    local distro=$1
+    
+    case "$distro" in
+        debian|ubuntu|kali)
+            proot-distro login "$distro" --shared-tmp -- bash -c "
+                export DEBIAN_FRONTEND=noninteractive
+                apt install -y tigervnc-standalone-server tigervnc-common
+                echo 'xterm' | vncpasswd -f > /root/.vnc/passwd 2>/dev/null || mkdir -p /root/.vnc && echo 'xterm' | vncpasswd -f > /root/.vnc/passwd
+                chmod 600 /root/.vnc/passwd
+            " || return 1
+            ;;
+        archlinux)
+            proot-distro login "$distro" --shared-tmp -- bash -c "
+                pacman -S --noconfirm tigervnc
+                echo 'xterm' | vncpasswd -f > /root/.vnc/passwd 2>/dev/null || mkdir -p /root/.vnc && echo 'xterm' | vncpasswd -f > /root/.vnc/passwd
+                chmod 600 /root/.vnc/passwd
+            " || return 1
+            ;;
+        alpine)
+            proot-distro login "$distro" --shared-tmp -- bash -c "
+                apk add tigervnc
+                echo 'xterm' | vncpasswd -f > /root/.vnc/passwd 2>/dev/null || mkdir -p /root/.vnc && echo 'xterm' | vncpasswd -f > /root/.vnc/passwd
+                chmod 600 /root/.vnc/passwd
+            " || return 1
+            ;;
+    esac
+}
+
+# --- 卸载系统 ---
+uninstall_system() {
+    local installed=$(get_installed_distros)
+    if [ -z "$installed" ]; then
+        err "没有已安装的系统！"
+        sleep 2
+        return
+    fi
+    
+    clear
+    echo -e "${B}┌── [卸载系统] ──────────────┐${NC}"
+    echo -e "${R}警告：此操作将删除所选系统及其所有数据！${NC}"
+    echo ""
+    echo -e "${G}已安装的系统：${NC}"
+    
+    local i=1
+    local distros=()
+    while IFS= read -r distro; do
+        if [ -n "$distro" ]; then
+            echo -e "  $i. ${C}$distro${NC}"
+            distros+=("$distro")
+            ((i++))
+        fi
+    done <<< "$installed"
+    
+    echo -e "  0. 返回"
+    echo -e "${B}└────────────────────────────┘${NC}"
+    read -p "👉 选择要卸载的系统: " choice
+    
+    if [ "$choice" = "0" ] || [ -z "$choice" ]; then
+        return
+    fi
+    
+    local selected_distro="${distros[$((choice-1))]}"
+    if [ -z "$selected_distro" ]; then
+        err "无效的选择！"
+        sleep 1
+        return
+    fi
+    
+    read -p "确定要删除 $selected_distro 吗? (y/n): " confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        log "正在卸载 $selected_distro..."
+        proot-distro remove "$selected_distro" 2>&1 && {
+            log "✅ 卸载完成！"
+        } || {
+            err "卸载失败！"
+        }
+        sleep 2
+    fi
+}
+
+# --- Shizuku 修复 ---
+fix_shizuku() {
+    log "正在检查 Shizuku 环境..."
+    
+    if [ ! -f "$PREFIX/bin/rish" ] || [ ! -f "$PREFIX/bin/rish_shizuku.dex" ]; then
+        warn "正在下载 rish 组件..."
+        mkdir -p "$PREFIX/bin"
+        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish" -o "$PREFIX/bin/rish" || {
+            err "下载失败！请检查网络连接。"
+            sleep 2
+            return
+        }
+        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish_shizuku.dex" -o "$PREFIX/bin/rish_shizuku.dex" || {
+            err "下载失败！请检查网络连接。"
+            sleep 2
+            return
+        }
+        chmod +x "$PREFIX/bin/rish"
+    fi
+    
+    warn "⚠️  如果 Shizuku 弹出授权窗口，请务必点击【始终允许】！"
+    
+    if "$PREFIX/bin/rish" -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647 && cmd appops set com.termux RUN_IN_BACKGROUND allow" 2>/dev/null; then
+        log "✅ 修复成功！Termux 已获得后台运行权限。"
+    else
+        err "授权失败！"
+        warn "可能原因：Shizuku 未启动，或未授权。"
+        warn "请确保 Shizuku APP 正在运行，然后再试一次。"
+    fi
+    
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+# ==============================================================================
+# 📺 主菜单
+# ==============================================================================
 main_menu() {
-    # 首次启动自检
-    if [ ! -f "$PREFIX/etc/apt/sources.list.d/x11.list" ]; then pkg install x11-repo -y; fi
+    # 首次启动检查
+    if ! command_exists proot-distro; then
+        warn "检测到未安装 proot-distro，正在安装..."
+        pkg update -y
+        pkg install proot-distro -y || {
+            err "安装失败！请检查网络连接。"
+            exit 1
+        }
+    fi
     
     while true; do
         clear
-        echo -e "${B}┌────────────────────────────────────────┐${NC}"
-        echo -e "${B}│         XXY v4.0 终极生产力工具箱      │${NC}"
-        echo -e "${B}└────────────────────────────────────────┘${NC}"
-        echo -e "当前状态: $(if [ -d "$ROOTFS" ]; then echo "${G}Debian 已就绪${NC}"; else echo "${R}未安装系统${NC}"; fi)"
-        echo ""
-        echo -e "1. ${G}🚀 启动桌面环境${NC} (日常使用点这个)"
-        echo -e "2. 💿 安装/管理系统 (二级菜单)"
-        echo -e "3. 🛠️ 维护/防闪退修复 (二级菜单)"
-        echo -e "0. ❌ 退出"
-        echo ""
-        read -p "👉 请输入序号: " main_opt
+        # 使用 printf 避免闪烁
+        printf "${B}┌────────────────────────────────────────┐${NC}\n"
+        printf "${B}│    XXY v${VERSION} - Termux 容器管理器    │${NC}\n"
+        printf "${B}└────────────────────────────────────────┘${NC}\n"
+        printf "\n"
         
-        case "$main_opt" in
-            1) start_desktop ;;
-            2) menu_install ;;
-            3) menu_maintenance ;;
-            0) exit 0 ;;
+        local installed=$(get_installed_distros)
+        if [ -n "$installed" ]; then
+            printf "已安装系统: ${G}"
+            echo "$installed" | tr '\n' ' '
+            printf "${NC}\n\n"
+        else
+            printf "状态: ${R}未安装系统${NC}\n\n"
+        fi
+        
+        printf "1. ${G}登录系统${NC} (Login)\n"
+        printf "2. ${C}安装新系统${NC} (Install)\n"
+        printf "3. ${Y}启动桌面${NC} (GUI Mode)\n"
+        printf "4. ${R}卸载系统${NC} (Uninstall)\n"
+        printf "5. ${B}Shizuku 修复${NC} (防闪退)\n"
+        printf "0. ${W}退出${NC}\n"
+        printf "\n"
+        
+        read -p "👉 请输入序号: " choice
+        
+        case "$choice" in
+            1) login_system ;;
+            2) install_system ;;
+            3) start_gui ;;
+            4) uninstall_system ;;
+            5) fix_shizuku ;;
+            0) safe_exit ;;
             *) ;;
         esac
     done
