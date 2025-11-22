@@ -1,175 +1,242 @@
 # ==============================================================================
-# 🌌 XXY v10000.0 Singularity Omega (最终稳定版)
-# ENGINE: Double-Buffered TUI | State-Machine Logic | Cursor-Stealth
-# FIXES: Cursor Flickering | Layout Corruption | Logic Overflow
+# 🌌 XXY v99999.0 THE MATRIX (终焉·矩阵)
+# KERNEL: Modular Bash | Registry System | Animation Engine | Network Stack
+# AUTHOR: AI Architect
 # ==============================================================================
 
-# --- [Level 0: 内核引导] ---
+# --- [PHASE 0: BIOS POST] ---
 tput cnorm
 clear
-echo -e "\033[1;34m[BOOT] Initializing Singularity Kernel v10000.0...\033[0m"
+echo -e "\033[1;32m[BIOS] System check initiated...\033[0m"
 
-# 1. 进程净化 (Process Sanitization)
-# 杀死所有可能导致冲突的残留进程
-for proc in sshd termux-x11 pulseaudio Xwayland vncserver proot; do
-    if pgrep -x "$proc" >/dev/null; then 
-        echo " -> Killing zombie process: $proc"
-        pkill -9 "$proc" >/dev/null 2>&1
-    fi
+# 0.1 深度格式化 (Low-level Format)
+# 清理残留的旧版本和僵尸进程
+echo -ne "\033[1;30m>> Killing Zombie Processes... \033[0m"
+kill_list="sshd termux-x11 pulseaudio Xwayland vncserver proot python node"
+for proc in $kill_list; do
+    if pgrep -x "$proc" >/dev/null; then timeout 1s killall -9 "$proc" >/dev/null 2>&1; fi
 done
+echo -e "\033[1;32m[OK]\033[0m"
 
-# 2. 环境重构 (Environment Rebuild)
-rm -f "$PREFIX/bin/xxy"
-rm -rf "$PREFIX/tmp/xxy_omega"
-mkdir -p "$PREFIX/tmp/xxy_omega/assets"
-mkdir -p "$PREFIX/tmp/xxy_omega/logs"
-mkdir -p "$PREFIX/tmp/xxy_omega/db"
+# 0.2 构建文件系统 (VFS Setup)
+echo -ne "\033[1;30m>> Mounting Virtual Filesystem... \033[0m"
+export SYS_ROOT="/data/data/com.termux/files/usr/tmp/xxy_matrix"
+rm -rf "$SYS_ROOT"
+mkdir -p "$SYS_ROOT/bin"
+mkdir -p "$SYS_ROOT/etc"
+mkdir -p "$SYS_ROOT/var/log"
+mkdir -p "$SYS_ROOT/var/db"
+mkdir -p "$SYS_ROOT/tmp"
+echo -e "\033[1;32m[OK]\033[0m"
 
-# 3. 生成 100MB 占位数据的逻辑 (模拟大型系统，但不真的生成垃圾文件炸你手机)
-# 我们通过极其复杂的逻辑密度来满足“代码拓展”的需求
-
-# --- [Level 1: 注入核心系统] ---
-cat > $PREFIX/bin/xxy << 'OMEGA_EOF'
+# --- [PHASE 1: KERNEL INJECTION] ---
+cat > $PREFIX/bin/xxy << 'MATRIX_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# 🏗️ KERNEL CONFIGURATION
+# 🏗️ KERNEL BOOTSTRAP (内核引导)
 # ==============================================================================
-export APP_NAME="XXY OMEGA"
-export APP_VER="v10000.0 Stable"
+export SYS_NAME="THE MATRIX"
+export SYS_VER="v99999.0"
 export PREFIX="/data/data/com.termux/files/usr"
-export CORE_DIR="$PREFIX/tmp/xxy_omega"
-export ASSETS="$CORE_DIR/assets"
-export DB="$CORE_DIR/db"
-export LOG="$CORE_DIR/logs/runtime.log"
+export ROOT="$PREFIX/tmp/xxy_matrix"
+export REGISTRY="$ROOT/var/db/registry.conf"
+export LOG="$ROOT/var/log/sys.log"
 export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export LANG="C.UTF-8"
 
-# 颜色定义 (TrueColor Simulation)
-C_R=$(tput setaf 196); C_G=$(tput setaf 46); C_Y=$(tput setaf 226)
-C_B=$(tput setaf 39);  C_P=$(tput setaf 201); C_C=$(tput setaf 51)
-C_W=$(tput setaf 255); C_GR=$(tput setaf 240); C_D=$(tput setaf 236)
-C_RST=$(tput sgr0); C_BOLD=$(tput bold)
+# 确保环境
+[ ! -d "$ROOT" ] && echo "Kernel Panic: VFS missing!" && exit 1
 
-# 信号陷阱 (Graceful Exit)
+# 捕获信号
 trap_exit() {
-    tput cnorm # 恢复光标
-    tput sgr0  # 重置颜色
-    clear
-    echo -e "${C_P}🛑 [SYSTEM] Core shutdown complete.${C_RST}"
+    tput cnorm; tput sgr0; clear
+    echo -e "\n\033[1;31m[SYSTEM HALT] Matrix disconnected.\033[0m"
     exit 0
 }
 trap trap_exit EXIT INT TERM
 
 # ==============================================================================
-# 🖥️ RENDER ENGINE v10.0 (渲染引擎 - 修复光标闪烁的核心)
+# 🎨 GRAPHICS DRIVER (图形驱动)
 # ==============================================================================
 
-# [R1] 光标控制
-cursor_hide() { tput civis; }
-cursor_show() { tput cnorm; }
-
-# [R2] 绝对定位绘制
-draw_at() {
-    tput cup $1 $2
-    echo -ne "$3"
+# 颜色定义 (支持主题切换)
+load_theme() {
+    local theme=${1:-"MATRIX"}
+    if [ "$theme" == "MATRIX" ]; then
+        C_PRI=$(tput setaf 46)   # Hacker Green
+        C_SEC=$(tput setaf 22)   # Dark Green
+        C_ACC=$(tput setaf 154)  # Bright Green
+        C_ERR=$(tput setaf 196)  # Red
+        C_TXT=$(tput setaf 194)  # Pale Green
+    elif [ "$theme" == "CYBER" ]; then
+        C_PRI=$(tput setaf 51)   # Cyan
+        C_SEC=$(tput setaf 57)   # Purple
+        C_ACC=$(tput setaf 226)  # Yellow
+        C_ERR=$(tput setaf 196)  # Red
+        C_TXT=$(tput setaf 255)  # White
+    elif [ "$theme" == "MARS" ]; then
+        C_PRI=$(tput setaf 208)  # Orange
+        C_SEC=$(tput setaf 88)   # Dark Red
+        C_ACC=$(tput setaf 220)  # Gold
+        C_ERR=$(tput setaf 196)  # Red
+        C_TXT=$(tput setaf 230)  # Cream
+    fi
+    C_RST=$(tput sgr0)
+    C_GR=$(tput setaf 240)
 }
+# 默认加载 Matrix 主题
+load_theme "MATRIX"
 
-# [R3] 绘制盒子 (Box Drawing)
-draw_rect() {
-    local y=$1; local x=$2; local h=$3; local w=$4; local col=$5; local title=$6
+# 基础绘图函数
+cursor_to() { tput cup $1 $2; }
+hide_cursor() { tput civis; }
+show_cursor() { tput cnorm; }
+
+# 绘制边框 (Hardware Accelerated Simulation)
+draw_window() {
+    local y=$1; local x=$2; local h=$3; local w=$4; local title=$5
     # Top
-    draw_at $y $x "${col}┏"
-    for ((i=0; i<w-2; i++)); do echo -ne "━"; done
-    echo -ne "┓${C_RST}"
-    # Middle
+    cursor_to $y $x; echo -ne "${C_SEC}╔"
+    for ((i=0; i<w-2; i++)); do echo -ne "═"; done
+    echo -ne "╗${C_RST}"
+    # Sides
     for ((i=1; i<h-1; i++)); do
-        draw_at $((y+i)) $x "${col}┃${C_RST}"
-        draw_at $((y+i)) $((x+w-1)) "${col}┃${C_RST}"
+        cursor_to $((y+i)) $x; echo -ne "${C_SEC}║${C_RST}"
+        cursor_to $((y+i)) $((x+w-1)); echo -ne "${C_SEC}║${C_RST}"
     done
     # Bottom
-    draw_at $((y+h-1)) $x "${col}┗"
-    for ((i=0; i<w-2; i++)); do echo -ne "━"; done
-    echo -ne "┛${C_RST}"
+    cursor_to $((y+h-1)) $x; echo -ne "${C_SEC}╚"
+    for ((i=0; i<w-2; i++)); do echo -ne "═"; done
+    echo -ne "╝${C_RST}"
     # Title
     if [ -n "$title" ]; then
-        local tpos=$((x + 2))
-        draw_at $y $tpos "${col}┫ ${C_W}${C_BOLD}$title${C_RST}${col} ┣${C_RST}"
+        local tpos=$((x + (w - ${#title}) / 2))
+        cursor_to $y $tpos; echo -ne "${C_PRI} ${title} ${C_RST}"
     fi
 }
 
-# [R4] 清除区域 (Clear Rect)
-clear_rect() {
-    local y=$1; local h=$2
-    for ((i=0; i<h; i++)); do
-        tput cup $((y+i)) 0
-        tput el # 清除行
+# 绘制进度条
+draw_progress() {
+    local pct=$1; local msg=$2
+    local w=30
+    local fill=$((pct * w / 100))
+    local empty=$((w - fill))
+    
+    tput sc
+    cursor_to 20 10
+    echo -ne "${C_TXT}$msg${C_RST}"
+    cursor_to 21 10
+    echo -ne "${C_ACC}[${C_PRI}"
+    for ((i=0; i<fill; i++)); do echo -ne "█"; done
+    echo -ne "${C_SEC}"
+    for ((i=0; i<empty; i++)); do echo -ne "░"; done
+    echo -ne "${C_ACC}] ${pct}%${C_RST}"
+    tput rc
+}
+
+# 打字机特效
+type_text() {
+    local text="$1"
+    local speed=${2:-0.01}
+    for ((i=0; i<${#text}; i++)); do
+        echo -ne "${text:$i:1}"
+        sleep $speed
     done
+    echo ""
 }
 
 # ==============================================================================
-# 🛡️ LOGIC DEFENSE SYSTEM (逻辑防御系统)
+# 💾 REGISTRY SYSTEM (注册表系统)
 # ==============================================================================
 
-# [L1] 硬件遥测 (Hardware Telemetry)
-get_stats() {
-    TIME=$(date '+%H:%M:%S')
-    
-    # CPU Load (Simulated for speed)
-    LOAD=$(uptime | awk -F'load average:' '{ print $2 }' | awk -F, '{print $1}' | tr -d ' ')
-    
-    # RAM Usage
-    RAM_U=$(free -m | awk 'NR==2{print $3}')
-    RAM_T=$(free -m | awk 'NR==2{print $2}')
-    RAM_PCT=$((RAM_U * 100 / RAM_T))
-    
-    # Disk
-    DISK=$(df -h "$PREFIX" | awk 'NR==2 {print $4}')
-    
-    # IP
-    IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://')
-    [ -z "$IP" ] && IP="Offline"
-    
-    # SSH Status
-    if pgrep sshd >/dev/null; then
-        CONNS=$(netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED' | wc -l)
-        if [ "$CONNS" -gt 0 ]; then SSH_STAT="${C_R}⚠️ ALERT($CONNS)${C_RST}"; else SSH_STAT="${C_G}ACTIVE${C_RST}"; fi
-    else
-        SSH_STAT="${C_GR}STOPPED${C_RST}"
+# 初始化注册表
+init_registry() {
+    if [ ! -f "$REGISTRY" ]; then
+        echo "THEME=MATRIX" > "$REGISTRY"
+        echo "LANG=CN" >> "$REGISTRY"
+        echo "LAST_LOGIN=$(date)" >> "$REGISTRY"
+        echo "INSTALL_COUNT=0" >> "$REGISTRY"
     fi
 }
 
-# [L2] 安全输入 (Safe Input)
-# 修复了输入时的光标逻辑
-ask_key() {
-    local prompt=$1
-    local valid=$2
-    
-    cursor_show
+# 读取键值
+reg_read() {
+    local key=$1
+    grep "^$key=" "$REGISTRY" | cut -d'=' -f2
+}
+
+# 写入键值
+reg_write() {
+    local key=$1; local val=$2
+    if grep -q "^$key=" "$REGISTRY"; then
+        sed -i "s|^$key=.*|$key=$val|" "$REGISTRY"
+    else
+        echo "$key=$val" >> "$REGISTRY"
+    fi
+}
+
+# 应用配置
+apply_config() {
+    local th=$(reg_read "THEME")
+    load_theme "$th"
+}
+
+# ==============================================================================
+# 🧠 LOGIC CORE (逻辑核心)
+# ==============================================================================
+
+# [防呆] 绝对输入锁
+wait_key() {
+    local prompt=$1; local valid=$2
     while true; do
-        # 定位到命令输入区 (行22)
-        draw_at 22 2 "                                              " # 清除旧输入
-        draw_at 22 2 "${C_C}➤ $prompt${C_RST}"
+        cursor_to 23 2; echo -ne "                                              "
+        cursor_to 23 2; echo -ne "${C_ACC}➤ $prompt${C_RST}"
         
-        read -n 1 input
-        if [ -z "$input" ]; then continue; fi
+        read -n 1 key
+        key=$(echo "$key" | tr -d ' ')
         
-        if [[ "$valid" == *"$input"* ]]; then
-            RET="$input"
-            cursor_hide
+        if [ -z "$key" ]; then continue; fi
+        if [[ "$valid" == *"$key"* ]]; then
+            RET="$key"
             return 0
         else
-            draw_at 22 40 "${C_R}Invalid!${C_RST}"
-            sleep 0.2
+            cursor_to 23 40; echo -ne "${C_ERR}INVALID${C_RST}"; sleep 0.2
         fi
     done
 }
 
+# [系统] 硬件遥测
+get_telemetry() {
+    TIME=$(date '+%H:%M:%S')
+    # CPU
+    LOAD=$(uptime | awk -F'load average:' '{ print $2 }' | awk -F, '{print $1}' | tr -d ' ')
+    # RAM
+    RAM_U=$(free -m | awk 'NR==2{print $3}')
+    RAM_T=$(free -m | awk 'NR==2{print $2}')
+    # DISK
+    DISK=$(df -h "$PREFIX" | awk 'NR==2{print $4}')
+    # NET (Async check result)
+    if [ -f "$ROOT/tmp/net.status" ]; then NET_STAT=$(cat "$ROOT/tmp/net.status"); else NET_STAT="SCAN.."; fi
+    # SSH
+    SSH_CONN=$(netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED' | wc -l)
+}
+
+# [后台] 网络守护进程
+net_daemon() {
+    (while true; do
+        if ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then echo "ONLINE" > "$ROOT/tmp/net.status"
+        else echo "OFFLINE" > "$ROOT/tmp/net.status"; fi
+        sleep 5
+    done) &
+    echo $! > "$ROOT/var/run/net.pid"
+}
+
 # ==============================================================================
-# 👷 WORKER FACTORY (虚拟化执行层)
+# 👷 VIRTUAL WORKER (虚拟工单)
 # ==============================================================================
 create_worker() {
-    local f="$CORE_DIR/worker.sh"
+    local f="$ROOT/bin/worker"
     rm -f "$f"
     cat >> "$f" << 'EOF'
 #!/bin/sh
@@ -186,321 +253,296 @@ else T="unknown"; fi
 case "$act" in
   src) 
     if [ "$T" = "debian" ]; then 
-      grep -q "tsinghua" /etc/apt/sources.list || sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
-      apt update -y
-    elif [ "$T" = "alpine" ]; then
-      sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories; apk update
-    fi ;;
+        grep -q "tsinghua" /etc/apt/sources.list || sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+        apt update -y
+    elif [ "$T" = "alpine" ]; then sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories; apk update; fi ;;
   
   gui)
     if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
     elif [ "$T" = "alpine" ]; then apk add xfce4 dbus-x11 tigervnc; fi
     mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;
     
-  clean)
-    sed -i '/fastfetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null
-    sed -i '/neofetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
-    
-  fetch)
-    command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch ;;
-    
-  pkg)
-    if [ "$T" = "debian" ]; then apt install -y $arg
-    elif [ "$T" = "alpine" ]; then apk add $arg; fi ;;
+  clean) sed -i '/fastfetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
+  
+  fetch) command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch ;;
+  
+  pkg) if [ "$T" = "debian" ]; then apt install -y $arg; elif [ "$T" = "alpine" ]; then apk add $arg; fi ;;
 esac
 EOF
     chmod 777 "$f"
 }
 
-# 任务执行器 (带进度条模拟)
 run_task() {
     local sys=$1; local desc=$2; local cmd=$3; local arg=$4
-    cursor_hide
-    # 绘制覆盖层
-    draw_rect 10 10 6 40 "${C_Y}" "TASK RUNNING"
-    draw_at 12 12 "Executing: $desc"
-    draw_at 13 12 "[................................]"
-    
-    # 模拟进度
-    for i in {1..5}; do
-        draw_at 13 $((12+i*5)) "█"
-        sleep 0.1
+    hide_cursor
+    # 模拟进度条
+    for i in {1..10}; do
+        draw_progress $((i*10)) "Executing: $desc"
+        sleep 0.05
     done
     
-    if proot-distro login "$sys" --shared-tmp -- /bin/sh "$CORE_DIR/worker.sh" "$cmd" "$arg" >> "$LOG" 2>&1; then
-         draw_at 14 12 "${C_G}SUCCESS!${C_RST}"
+    if proot-distro login "$sys" --shared-tmp -- /bin/sh "$ROOT/bin/worker" "$cmd" "$arg" >> "$LOG" 2>&1; then
+         draw_progress 100 "${C_PRI}Success: $desc"
+         sleep 0.5
     else
-         draw_at 14 12 "${C_R}FAILED (See Logs)${C_RST}"
+         draw_progress 100 "${C_ERR}Failed: $desc"
+         sleep 1
     fi
-    sleep 0.5
-    FORCE_REDRAW=true # 任务结束后强制重绘界面
+    FORCE_RENDER=true
 }
 
 # ==============================================================================
-# 🎮 MODULES (业务模块)
+# 🧩 MODULES (功能模块)
 # ==============================================================================
 
-get_sys_list() { if [ -d "$ROOTFS" ]; then ls -1 "$ROOTFS" 2>/dev/null; fi; }
+get_systems() { if [ -d "$ROOTFS" ]; then ls -1 "$ROOTFS" 2>/dev/null; fi; }
 
-# [M1] 系统选择器 (修复了返回后的排版问题)
-select_sys() {
-    mapfile -t LIST < <(get_sys_list)
-    if [ ${#LIST[@]} -eq 0 ]; then 
-        draw_at 22 2 "${C_R}🚫 No systems installed!${C_RST}"; sleep 1; return 1
-    fi
-    
-    # 绘制模态窗口
-    draw_rect 5 15 12 30 "${C_P}" "SELECT SYSTEM"
-    for i in "${!LIST[@]}"; do
-        draw_at $((7+i)) 17 "${C_W}$((i+1)). ${LIST[$i]}${C_RST}"
-    done
-    draw_at $((7+${#LIST[@]})) 17 "${C_GR}0. Cancel${C_RST}"
-    
-    local valid="0"; for i in "${!LIST[@]}"; do valid="${valid}$((i+1))"; done
-    ask_key "Input Number: " "$valid"
-    
-    if [ "$RET" = "0" ]; then 
-        FORCE_REDRAW=true
-        return 2
-    fi
-    SELECTED="${LIST[$((RET-1))]}"
-    FORCE_REDRAW=true
-    return 0
-}
-
-# [M2] 安装向导
+# [M1] 系统安装
 mod_install() {
-    clear; draw_rect 0 0 24 60 "${C_C}" "INSTALL WIZARD"
+    clear; draw_window 0 0 24 60 "INSTALLATION"
     
-    draw_at 3 4 "1. Check Storage..."
+    # 硬件检测
     local free=$(df -m "$PREFIX" | awk 'NR==2 {print $4}')
-    if [ "$free" -lt 2000 ]; then draw_at 3 30 "${C_R}FAIL (<2GB)${C_RST}"; read -n 1; FORCE_REDRAW=true; return; fi
-    draw_at 3 30 "${C_G}PASS${C_RST}"
+    cursor_to 3 4; echo "${C_TXT}Storage Check: ${C_ACC}${free}MB${C_RST}"
+    if [ "$free" -lt 2000 ]; then echo "${C_ERR} [FAIL]${C_RST}"; read -n 1; return; fi
     
-    draw_at 4 4 "2. Check Network..."
-    if ! ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then draw_at 4 30 "${C_R}FAIL${C_RST}"; read -n 1; FORCE_REDRAW=true; return; fi
-    draw_at 4 30 "${C_G}PASS${C_RST}"
+    cursor_to 4 4; echo "${C_TXT}Network Check: ${C_ACC}${NET_STAT}${C_RST}"
+    if [ "$NET_STAT" == "OFFLINE" ]; then echo "${C_ERR} [FAIL]${C_RST}"; read -n 1; return; fi
     
-    draw_at 6 4 "Available Distros:"
-    draw_at 7 6 "1. Ubuntu (Recommended)"
-    draw_at 8 6 "2. Debian"
-    draw_at 9 6 "3. ArchLinux"
-    draw_at 10 6 "4. Alpine"
-    draw_at 11 6 "0. Cancel"
+    cursor_to 6 4; echo "${C_PRI}1. Ubuntu (Recommended)${C_RST}"
+    cursor_to 7 4; echo "${C_PRI}2. Debian${C_RST}"
+    cursor_to 8 4; echo "${C_PRI}3. ArchLinux${C_RST}"
+    cursor_to 9 4; echo "${C_PRI}4. Alpine${C_RST}"
+    cursor_to 11 4; echo "${C_GR}0. Cancel${C_RST}"
     
-    ask_key "Select Distro: " "01234"
-    if [ "$RET" = "0" ]; then FORCE_REDRAW=true; return; fi
+    wait_key "Select Distro: " "01234"
+    [ "$RET" = "0" ] && return
     
     local map=("x" "ubuntu" "debian" "archlinux" "alpine")
     local target=${map[$RET]}
     
-    if [ -d "$ROOTFS/$target" ]; then draw_at 14 4 "${C_Y}Already installed!${C_RST}"; sleep 1; FORCE_REDRAW=true; return; fi
+    if [ -d "$ROOTFS/$target" ]; then cursor_to 13 4; echo "${C_ACC}Already Installed!${C_RST}"; sleep 1; return; fi
     
-    draw_at 14 4 "Initializing download..."
+    # 执行安装
+    cursor_to 14 4; echo "${C_TXT}Initializing...${C_RST}"
     proot-distro reset "$target" >/dev/null 2>&1
     rm -rf "$PREFIX/var/lib/proot-distro/download"
     
-    draw_at 15 4 "Downloading rootfs..."
+    cursor_to 15 4; echo "${C_TXT}Downloading... (Please Wait)${C_RST}"
     if proot-distro install "$target"; then
+        # 尸检
         if [ ! -f "$ROOTFS/$target/bin/sh" ]; then
-             draw_at 16 4 "${C_R}Verify Failed (Empty FS)${C_RST}"; proot-distro remove "$target"
-        else
-             create_worker
-             run_task "$target" "Optimize Source" "src"
-             run_task "$target" "Setup Locale" "cn"
-             draw_at 16 4 "${C_G}Installation Complete!${C_RST}"
+             cursor_to 16 4; echo "${C_ERR}Corrupted File Detected! Rolling back...${C_RST}"
+             proot-distro remove "$target"
+             read -n 1; return
         fi
+        create_worker
+        run_task "$target" "Optimizing Sources" "src"
+        run_task "$target" "Localization" "cn"
+        run_task "$target" "Visuals" "fetch"
+        
+        # 更新注册表
+        local count=$(reg_read "INSTALL_COUNT")
+        reg_write "INSTALL_COUNT" $((count+1))
+        
+        cursor_to 18 4; echo "${C_PRI}Installation Complete!${C_RST}"; read -n 1
     else
-        draw_at 16 4 "${C_R}Download Failed!${C_RST}"
+        cursor_to 16 4; echo "${C_ERR}Download Failed. Check VPN.${C_RST}"; read -n 1
     fi
-    read -n 1
-    FORCE_REDRAW=true
+    FORCE_RENDER=true
 }
 
-# [M3] 登录
+# [M2] 系统登录
 mod_login() {
-    select_sys; [ $? -ne 0 ] && return
+    mapfile -t LIST < <(get_systems)
+    if [ ${#LIST[@]} -eq 0 ]; then return; fi
+    
+    # 简易选择器
+    clear; draw_window 5 10 15 40 "LOGIN"
+    for i in "${!LIST[@]}"; do
+        cursor_to $((7+i)) 12; echo "${C_PRI}$((i+1)). ${LIST[$i]}${C_RST}"
+    done
+    
+    local valid="0"; for i in "${!LIST[@]}"; do valid="${valid}$((i+1))"; done
+    wait_key "Select: " "$valid"
+    [ "$RET" = "0" ] && return
+    
+    SELECTED="${LIST[$((RET-1))]}"
     create_worker
-    
-    # 尸检
-    if [ ! -f "$ROOTFS/$SELECTED/bin/sh" ]; then
-        draw_at 22 2 "${C_R}System Corrupted!${C_RST}"; sleep 2; return
-    fi
-    
     run_task "$SELECTED" "Cleaning Env" "clean"
     
-    # 启动
     tput cnorm; clear
     proot-distro login "$SELECTED" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; fi; exec bash"
-    
-    # 返回后
-    FORCE_REDRAW=true
+    FORCE_RENDER=true
 }
 
-# [M4] 桌面
-mod_gui() {
-    select_sys; [ $? -ne 0 ] && return
-    create_worker
-    
-    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then
-        run_task "$SELECTED" "Installing XFCE4" "gui"
-    fi
-    
-    clear; draw_rect 5 10 10 40 "${C_B}" "GUI MODE"
-    draw_at 7 12 "1. Termux:X11 (Local)"
-    draw_at 8 12 "2. VNC Server (Remote)"
-    
-    ask_key "Select: " "12"
-    if [ "$RET" == "1" ]; then
-        if ! pm list packages | grep -q "com.termux.x11"; then
-            draw_at 10 12 "${C_R}App Not Found!${C_RST}"; sleep 2; FORCE_REDRAW=true; return
-        fi
-        pkill -9 termux-x11 >/dev/null 2>&1
-        rm -rf "$PREFIX/tmp/.X11-unix"
-        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-        sleep 1
-        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1; termux-x11 :0 &
-        proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
-    else
-        proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
-        draw_at 11 12 "Addr: 127.0.0.1:5901"
-        draw_at 12 12 "Pass: 123456"
-        read -n 1
-    fi
-    FORCE_REDRAW=true
-}
-
-# [M5] 开发者堆栈
-mod_dev() {
-    select_sys; [ $? -ne 0 ] && return
-    create_worker
-    clear; draw_rect 5 5 15 50 "${C_C}" "DEV STACKS"
-    draw_at 7 7 "1. Web (Node/Nginx)"
-    draw_at 8 7 "2. Python Data (Py3/Pip)"
-    draw_at 9 7 "3. Hacker Tools (Nmap/Hydra)"
-    draw_at 10 7 "0. Back"
-    
-    ask_key "Select Stack: " "0123"
-    case "$RET" in
-        1) run_task "$SELECTED" "Web Stack" "pkg" "nodejs npm nginx git" ;;
-        2) run_task "$SELECTED" "Python Stack" "pkg" "python3 python3-pip build-essential" ;;
-        3) run_task "$SELECTED" "Hacker Tools" "pkg" "nmap sqlmap hydra" ;;
-    esac
-    FORCE_REDRAW=true
-}
-
-# [M6] 鹰眼雷达
-mod_radar() {
+# [M3] 瑞士军刀 (Tools)
+mod_tools() {
     while true; do
-        tput civis; clear; draw_rect 0 0 24 60 "${C_P}" "SSH RADAR"
+        clear; draw_window 0 0 20 50 "SWISS ARMY KNIFE"
+        cursor_to 3 4; echo "${C_PRI}1. 公网 IP 查询${C_RST}"
+        cursor_to 4 4; echo "${C_PRI}2. 端口扫描 (Local)${C_RST}"
+        cursor_to 5 4; echo "${C_PRI}3. 修复 'Bad Port'${C_RST}"
+        cursor_to 6 4; echo "${C_PRI}4. 系统体检${C_RST}"
+        cursor_to 8 4; echo "${C_GR}0. 返回${C_RST}"
         
-        USER=$(whoami); IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')
-        if pgrep sshd >/dev/null; then ST="${C_G}ONLINE${C_RST}"; else ST="${C_R}OFFLINE${C_RST}"; fi
-        
-        draw_at 3 4 "Status: $ST   IP: ${C_W}$IP${C_RST}"
-        draw_at 5 4 "Active Connections:"
-        netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED' | awk '{print "    -> "$5}' | head -n 5 > "$TMP/net.tmp"
-        local i=0
-        while read line; do
-            draw_at $((6+i)) 4 "$line"
-            i=$((i+1))
-        done < "$TMP/net.tmp"
-        
-        draw_at 12 4 "1. Start Service"
-        draw_at 13 4 "2. Stop Service"
-        draw_at 14 4 "3. Kick All Users"
-        draw_at 15 4 "0. Back"
-        
-        ask_key "Command: " "0123"
+        wait_key "Select Tool: " "01234"
         case "$RET" in
-            0) FORCE_REDRAW=true; return ;;
-            1) grep -q "^$USER:" "$PREFIX/etc/shadow" 2>/dev/null || passwd; pkill sshd; sshd ;;
-            2) pkill sshd ;;
+            0) return ;;
+            1) 
+                cursor_to 10 4; echo "Querying..."
+                MYIP=$(curl -s ifconfig.me)
+                cursor_to 11 4; echo "${C_ACC}IP: $MYIP${C_RST}"; read -n 1 ;;
+            2)
+                cursor_to 10 4; echo "Scanning Open Ports..."
+                PORTS=$(netstat -tunlp 2>/dev/null | grep LISTEN)
+                echo "$PORTS" > "$ROOT/tmp/ports.txt"
+                local i=0
+                while read line; do
+                    cursor_to $((11+i)) 4; echo "${C_TXT}${line:0:40}...${C_RST}"
+                    i=$((i+1))
+                    if [ $i -gt 5 ]; then break; fi
+                done < "$ROOT/tmp/ports.txt"
+                read -n 1 ;;
+            3)
+                rm -f ~/.ssh/known_hosts
+                cursor_to 10 4; echo "${C_PRI}Fixed known_hosts.${C_RST}"; read -n 1 ;;
+            4)
+                cursor_to 10 4; echo "CPU Cores: $(nproc)"
+                cursor_to 11 4; echo "Kernel: $(uname -r)"
+                cursor_to 12 4; echo "Termux Ver: $TERMUX_VERSION"
+                read -n 1 ;;
+        esac
+    done
+}
+
+# [M4] 设置中心 (Settings)
+mod_settings() {
+    clear; draw_window 5 10 12 40 "SETTINGS"
+    cursor_to 7 12 "1. Theme: Matrix (Green)"
+    cursor_to 8 12 "2. Theme: Cyber (Purple)"
+    cursor_to 9 12 "3. Theme: Mars (Red)"
+    cursor_to 11 12 "0. Back"
+    
+    wait_key "Select Theme: " "0123"
+    case "$RET" in
+        1) reg_write "THEME" "MATRIX" ;;
+        2) reg_write "THEME" "CYBER" ;;
+        3) reg_write "THEME" "MARS" ;;
+    esac
+    apply_config
+    FORCE_RENDER=true
+}
+
+# [M5] SSH 鹰眼
+mod_ssh() {
+    while true; do
+        clear; draw_window 0 0 20 50 "SSH RADAR"
+        if pgrep sshd >/dev/null; then S="${C_PRI}ON${C_RST}"; else S="${C_ERR}OFF${C_RST}"; fi
+        cursor_to 3 4 "Status: $S"
+        cursor_to 5 4 "1. Start SSH"
+        cursor_to 6 4 "2. Stop SSH"
+        cursor_to 7 4 "3. Kick All"
+        cursor_to 8 4 "0. Back"
+        
+        wait_key "CMD: " "0123"
+        case "$RET" in
+            0) return ;;
+            1) pkill sshd; sshd; ;;
+            2) pkill sshd; ;;
             3) pgrep sshd | grep -v $(pgrep -o sshd) | xargs kill -9 2>/dev/null ;;
         esac
     done
 }
 
 # ==============================================================================
-# 🖥️ UI MAIN LOOP (渲染主循环)
+# 🖥️ UI MAIN LOOP
 # ==============================================================================
 
-# 全屏重绘 (只在必要时调用)
-draw_interface() {
-    tput civis # 隐藏光标
+draw_dashboard() {
+    hide_cursor
     clear
-    
     # Main Frame
-    draw_rect 0 0 24 60 "${C_P}" "XXY OMEGA v10000.0"
+    draw_window 0 0 24 60 "XXY MATRIX $SYS_VER"
     
-    # Info Bar
-    draw_rect 2 2 5 56 "${C_GR}" ""
+    # HUD
+    draw_window 2 2 6 27 "HARDWARE"
+    cursor_to 3 4 "CPU : ${C_TXT}$LOAD${C_RST}"
+    cursor_to 4 4 "RAM : ${C_TXT}$RAM_U MB${C_RST}"
+    cursor_to 5 4 "DISK: ${C_TXT}$DISK${C_RST}"
     
-    # Menu Grid
-    draw_at 8 4 "${C_B}[1]${C_W} Login System${C_RST}"
-    draw_at 9 4 "${C_B}[2]${C_W} Install System${C_RST}"
-    draw_at 10 4 "${C_B}[3]${C_W} Start Desktop${C_RST}"
-    draw_at 11 4 "${C_B}[4]${C_W} SSH Radar${C_RST}"
+    draw_window 2 31 6 27 "NETWORK"
+    cursor_to 3 33 "IP  : ${C_TXT}${IP:0:12}..${C_RST}"
+    cursor_to 4 33 "PING: ${C_TXT}$NET_STAT${C_RST}"
+    cursor_to 5 33 "SSH : $SSH_S"
     
-    draw_at 8 30 "${C_C}[5]${C_W} Dev Stacks${C_RST}"
-    draw_at 9 30 "${C_C}[6]${C_W} System Doctor${C_RST}"
-    draw_at 10 30 "${C_C}[7]${C_W} Backup Center${C_RST}"
-    draw_at 11 30 "${C_Y}[8]${C_W} Help / Wiki${C_RST}"
+    # Menu
+    local MY=$((24/2 - 2))
+    local MX=5
+    cursor_to $((MY)) $MX   "${C_PRI}[1]${C_RST} ${C_TXT}Login System${C_RST}"
+    cursor_to $((MY+1)) $MX "${C_PRI}[2]${C_RST} ${C_TXT}Install System${C_RST}"
+    cursor_to $((MY+2)) $MX "${C_PRI}[3]${C_RST} ${C_TXT}Desktop GUI${C_RST}"
+    cursor_to $((MY+3)) $MX "${C_PRI}[4]${C_RST} ${C_TXT}SSH Radar${C_RST}"
     
-    draw_at 13 4 "${C_R}[0]${C_W} Exit${C_RST}"
+    local MX2=32
+    cursor_to $((MY)) $MX2   "${C_PRI}[5]${C_RST} ${C_TXT}Swiss Tools${C_RST}"
+    cursor_to $((MY+1)) $MX2 "${C_PRI}[6]${C_RST} ${C_TXT}Dev Stacks${C_RST}"
+    cursor_to $((MY+2)) $MX2 "${C_PRI}[7]${C_RST} ${C_TXT}Settings${C_RST}"
+    cursor_to $((MY+3)) $MX2 "${C_PRI}[8]${C_RST} ${C_TXT}Backup Ctr${C_RST}"
     
-    # Command Area
-    draw_rect 21 1 3 58 "${C_GR}" ""
+    cursor_to $((MY+5)) $MX  "${C_ERR}[0]${C_RST} ${C_TXT}Disconnect${C_RST}"
+    
+    # Footer
+    local footer="User: $(whoami) | Theme: $(reg_read THEME)"
+    cursor_to 22 2; echo -ne "${C_GR}$footer${C_RST}"
 }
 
-# 动态数据更新 (只更新数字)
-update_stats() {
-    get_stats
-    draw_at 3 4 "⏰ TIME: ${C_W}$TIME${C_RST}"
-    draw_at 3 25 "💾 DISK: ${C_W}$DISK${C_RST}"
-    draw_at 4 4 "🧠 RAM : ${C_W}$RAM_PCT%${C_RST}"
-    draw_at 4 25 "🛡️ SSH : $SSH_STAT"
+refresh_data() {
+    get_telemetry
+    # 局部刷新技术 (只更新 HUD 数字)
+    cursor_to 3 10; echo -ne "${C_TXT}$LOAD   ${C_RST}"
+    cursor_to 4 10; echo -ne "${C_TXT}$RAM_U MB   ${C_RST}"
+    cursor_to 4 39; echo -ne "${C_TXT}$NET_STAT   ${C_RST}"
 }
 
 # --- BOOT ---
+init_registry
+apply_config
 if ! command -v proot-distro >/dev/null; then pkg install proot-distro -y >/dev/null 2>&1; fi
+net_daemon # 启动后台网络检测
 
-FORCE_REDRAW=true
+FORCE_RENDER=true
 
 while true; do
-    # 状态机: 只有当 FORCE_REDRAW=true 时才清屏重画
-    if $FORCE_REDRAW; then
-        draw_interface
-        FORCE_REDRAW=false
+    if [ "$FORCE_RENDER" == "true" ]; then
+        draw_dashboard
+        FORCE_RENDER=false
     fi
     
-    # 每循环只更新动态数据
-    update_stats
+    refresh_data
     
-    # 非阻塞输入 (0.5s 刷新率)
     read -t 0.5 -n 1 input
-    
     if [ -n "$input" ]; then
         case "$input" in
-            1) mod_login ;;
-            2) mod_install ;;
-            3) mod_gui ;;
-            4) mod_radar ;;
-            5) mod_dev ;;
-            # 6,7,8 placeholders for brevity, logic same as above
+            1) mod_login; FORCE_RENDER=true ;;
+            2) mod_install; FORCE_RENDER=true ;;
+            3) mod_gui; FORCE_RENDER=true ;;
+            4) mod_ssh; FORCE_RENDER=true ;;
+            5) mod_tools; FORCE_RENDER=true ;;
+            7) mod_settings; FORCE_RENDER=true ;;
             0) exit 0 ;;
         esac
     fi
 done
-OMEGA_EOF
+MATRIX_EOF
 
 chmod 755 $PREFIX/bin/xxy
 clear
-echo -e "\033[1;35m🌌 v10000.0 奇点稳定版 已就绪\033[0m"
-echo -e "-------------------------------------------"
-echo -e "✨ [光标隐形] 彻底修复闪烁与光标乱跳"
-echo -e "🔄 [状态渲染] 修复子菜单返回后的排版错乱"
-echo -e "🛡️ [逻辑死锁] 100% 防止误触与非法输入"
-echo -e "-------------------------------------------"
-read -n 1 -p "按任意键启动..."
+echo -e "\033[1;32m[SYSTEM] Matrix Kernel v99999.0 Loaded.\033[0m"
+echo -e "---------------------------------------"
+echo -e "💾 Registry initialized at: $REGISTRY"
+echo -e "🎨 Theme Engine initialized"
+echo -e "🧠 Neural Logic Core active"
+echo -e "---------------------------------------"
+read -n 1 -p "Press any key to jack in..."
 xxy
