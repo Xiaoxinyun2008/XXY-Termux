@@ -3,18 +3,18 @@ rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/tmp/.X11-unix
 
-# 2. 写入 v35.3 脚本
+# 2. 写入 v36.0 脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Ultimate Edition v35.3)
-# FIX: 注入 GitHub 加速代理，解决无 VPN 下载失败问题
+# PROJECT: XXY (Ultimate Edition v36.0)
+# FIX: UI 遮挡修复、新增 Lynx 终端浏览器支持
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v35.3"
+export VERSION="v36.0"
 export UPDATE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
-export GITHUB_LINK="github.com/Xiaoxinyun2008/XXY-Termux"
+export GITHUB_URL="https://github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
@@ -46,11 +46,15 @@ get_ip() {
 check_dependencies() {
     if [ -f "$PREFIX/etc/xxy_checked" ]; then return; fi
     clear; echo -e "${C}=== XXY 环境初始化 ===${NC}"
+    # 新增 lynx 依赖检测，但为了启动速度，放到功能触发时再安装
     DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch"
+    
     if ! command -v fastfetch &>/dev/null; then pkg install fastfetch $TERMUX_PKG_OPTS >/dev/null 2>&1; fi
+    
     MISSING=""
     for dep in $DEPS; do if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi; done
     if ! command -v termux-x11 &>/dev/null; then pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1; MISSING="$MISSING termux-x11-nightly"; fi
+    
     if [ -n "$MISSING" ]; then
         echo -e "${P}🛠️  正在补全组件...${NC}"
         pkg update -y >/dev/null 2>&1 && pkg install $MISSING $TERMUX_PKG_OPTS
@@ -58,27 +62,19 @@ check_dependencies() {
     touch "$PREFIX/etc/xxy_checked"
 }
 
-# [核心新增] 劫持 proot-distro 配置文件实现下载加速
+# 注入 GitHub 加速代理
 optimize_network() {
-    # GitHub 加速代理前缀 (选用稳定的公益代理)
     local PROXY_URL="https://mirror.ghproxy.com/"
     local TARGETS="ubuntu debian archlinux alpine"
-    
     for distro in $TARGETS; do
         local conf_file="$PD_CONF/$distro.sh"
-        if [ -f "$conf_file" ]; then
-            # 检查是否已经注入过，防止重复注入
-            if ! grep -q "mirror.ghproxy.com" "$conf_file"; then
-                # 使用 sed 替换 TARBALL_URL
-                # 匹配 TARBALL_URL="https://github.com... 或 TARBALL_URL='https://github.com...
-                sed -i "s|TARBALL_URL=['\"]https://github.com|TARBALL_URL=\"${PROXY_URL}https://github.com|g" "$conf_file"
-                # 确保闭合引号也被正确处理 (有些是单引号有些是双引号，统一转为双引号开头更安全，或者仅替换头部)
-            fi
+        if [ -f "$conf_file" ] && ! grep -q "mirror.ghproxy.com" "$conf_file"; then
+            sed -i "s|TARBALL_URL=['\"]https://github.com|TARBALL_URL=\"${PROXY_URL}https://github.com|g" "$conf_file"
         fi
     done
 }
 
-# --- 2. 容器检测核心 ---
+# --- 2. 容器检测 ---
 
 get_systems() {
     local raw_list=$(proot-distro list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
@@ -135,11 +131,11 @@ EOF
 run_task() {
     local sys=$1; local cmd=$2; local desc=$3
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
-    tput cup 20 0; echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
+    tput cup 23 0; echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
     if proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1; then
-        tput cup 20 0; echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"
+        tput cup 23 0; echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"
     else
-        tput cup 20 0; echo -ne "${R}❌ [$sys] $desc 失败          ${NC}"
+        tput cup 23 0; echo -ne "${R}❌ [$sys] $desc 失败          ${NC}"
     fi
 }
 
@@ -161,7 +157,7 @@ select_menu() {
     return 1
 }
 
-# --- 功能 ---
+# --- 功能模块 ---
 
 do_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
@@ -194,31 +190,22 @@ do_install() {
     if [ "$idx" == "0" ]; then return; fi
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
-        
-        # [残留检测]
         if [ -d "$ROOTFS_BASE/$TARGET" ]; then
             if [ ! -f "$ROOTFS_BASE/$TARGET/bin/sh" ]; then
-                echo -e "\n${Y}清理残留...${NC}"
-                proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
-            else
-                echo -e "\n${G}已存在！${NC}"; read -n 1 -s -r -p "..."; return
-            fi
+                echo -e "\n${Y}清理残留...${NC}"; proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
+            else echo -e "\n${G}已存在！${NC}"; read -n 1 -s -r -p "..."; return; fi
         fi
         
-        # [核心优化] 注入加速链接
-        echo -e "\n${B}正在优化下载线路 (Mirror)...${NC}"
-        optimize_network
-        
-        echo -e "${Y}正在下载 $TARGET...${NC}"; tput cnorm
+        optimize_network # 注入加速
+        echo -e "\n${Y}下载中 (加速)...${NC}"; tput cnorm
         if proot-distro install $TARGET; then
             tput civis; create_worker_script
-            run_task "$TARGET" "change_source" "更换国内源"
+            run_task "$TARGET" "change_source" "换国内源"
             run_task "$TARGET" "install_cn" "中文环境"
-            run_task "$TARGET" "install_fastfetch" "安装工具"
+            run_task "$TARGET" "install_fastfetch" "美化工具"
             echo -e "\n${G}🎉 安装完成！${NC}"; read -n 1 -s -r -p "..."
         else
-            # [失败回滚]
-            echo -e "\n${R}❌ 安装失败，清理中...${NC}"
+            echo -e "\n${R}❌ 失败，正在清理...${NC}"
             proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
             read -n 1 -s -r -p "..."
         fi
@@ -231,9 +218,9 @@ do_gui() {
     create_worker_script
     echo -ne "🔍 检查组件...\r"
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
-        run_task "$TARGET" "install_gui" "安装 XFCE4 + VNC"
+        run_task "$TARGET" "install_gui" "安装 XFCE+VNC"
     fi
-    echo -e "\n${G}模式:${NC}\n1. Termux:X11 ${Y}(推荐)${NC}\n2. VNC Viewer\n0. 返回"
+    echo -e "\n${G}模式:${NC}\n1. Termux:X11\n2. VNC Viewer\n0. 返回"
     tput cnorm; stty echo; read -p "选择: " m; stty -echo; tput civis
     if [ "$m" == "1" ]; then
         pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1; rm -rf "$TMPDIR/.X11-unix"
@@ -244,20 +231,39 @@ do_gui() {
     elif [ "$m" == "2" ]; then
         CMD="vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
         proot-distro login "$TARGET" -- bash -c "$CMD"
-        echo -e "\n${G}VNC 已启动${NC}\n手机: 127.0.0.1:5901\n局域网: $(get_ip):5901\n密码: 123456"; read -n 1 -s -r -p "..."
+        echo -e "\n${G}VNC ON${NC}: ${W}127.0.0.1:5901${NC} | ${W}$(get_ip):5901${NC}\nCode: 123456"; read -n 1 -s -r -p "..."
     fi
+}
+
+# [F6] 终端浏览器访问 GitHub (新功能)
+do_github() {
+    clear; echo -e "${C}=== 访问 GitHub ===${NC}"
+    echo -e "正在启动终端浏览器..."
+    
+    # 自动配置相关库
+    if ! command -v lynx &>/dev/null; then
+        echo -e "${Y}检测到未安装浏览器，正在自动配置 lynx ...${NC}"
+        tput cnorm
+        pkg install lynx $TERMUX_PKG_OPTS
+        tput civis
+    fi
+    
+    echo -e "${G}正在跳转至项目主页... (按 Q 退出)${NC}"
+    sleep 1
+    # 启动 lynx 访问
+    lynx "$GITHUB_URL"
+    
+    # 退出后重绘 UI
+    tput civis; stty -echo; draw_ui
 }
 
 do_update() {
     clear; echo -e "${C}=== 检查更新 ===${NC}"
-    echo -ne "${B}连接服务器...${NC}\r"
     local temp="$TMPDIR/xxy_tmp"; rm -f "$temp"
-    # 使用加速代理检查更新 (防止更新脚本本身也因为无VPN失败)
-    # 注意：这里你可以选择是否给 update url 也加代理，视情况而定。这里暂时保持原样，因为通常脚本很小。
     if [ "$(curl -s -o "$temp" -w "%{http_code}" "$UPDATE_URL")" != "200" ]; then
         echo -e "\n${R}❌ 网络错误${NC}"; read -n 1 -s -r -p "..."; return
     fi
-    if ! grep -q "PROJECT: XXY" "$temp"; then echo -e "\n${R}❌ 文件校验失败${NC}"; read -n 1 -s -r -p "..."; return; fi
+    if ! grep -q "PROJECT: XXY" "$temp"; then echo -e "\n${R}❌ 校验失败${NC}"; read -n 1 -s -r -p "..."; return; fi
     REMOTE=$(grep "export VERSION=" "$temp" | cut -d'"' -f2)
     if [[ "$REMOTE" != "$VERSION" ]]; then
         echo -e "\n${Y}新版本: $REMOTE${NC}"; tput cnorm; stty echo; read -p "更新? (y/n): " c; stty -echo; tput civis
@@ -266,7 +272,7 @@ do_update() {
     read -n 1 -s -r -p "..."
 }
 
-# --- Main ---
+# --- Main UI ---
 update_status() {
     if (( FRAME % 50 == 0 )); then MEM=$(free -m 2>/dev/null | awk 'NR==2{printf "%.1fG", $3/1024}' || echo "N/A"); fi
     tput cup 0 34; printf "${B}╭── STATUS ──────────────────────────╮${NC}"
@@ -274,6 +280,7 @@ update_status() {
     tput cup 2 34; printf "${B}│${NC} IP: ${GR}%-15s${NC}             ${B}│${NC}" "$(get_ip)"
     tput cup 3 34; printf "${B}╰────────────────────────────────────╯${NC}"
 }
+
 draw_ui() {
     clear
     cat << EOF
@@ -285,22 +292,28 @@ ${C}
 ${GR}──────────────────────────────────────────${NC}
 ${GR}│${NC} ${W}1.${NC} 登录系统 (Login)    ${GR}│${NC} ${W}3.${NC} 启动桌面 (GUI)
 ${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}5.${NC} 检查更新 (Update)
+${GR}│${NC} ${W}6.${NC} 访问 GitHub (Lynx)  ${GR}│${NC} ${W}0.${NC} 退出程序 (Exit)
 ${GR}──────────────────────────────────────────${NC}
-${GR}🔗 GitHub: ${W}${GITHUB_LINK}${NC}
 EOF
-    if command -v fastfetch >/dev/null; then fastfetch --config structure:OS:Kernel --logo none 2>/dev/null | sed 's/^/  /'; fi
+    # 限制 Fastfetch 行数防止遮挡，只显示 OS, Kernel, Uptime
+    if command -v fastfetch >/dev/null; then
+        fastfetch --config structure:OS:Kernel:Uptime --logo none 2>/dev/null | sed 's/^/  /'
+    fi
 }
 
 check_dependencies; create_worker_script; tput civis; stty -echo
 draw_ui; INPUT_BUF=""; FRAME=0; MEM="Wait"
 while true; do
     update_status; ((FRAME++))
-    tput cup 14 0; echo -ne "${C}➤ 序号: ${W}${INPUT_BUF}_        ${NC}"
+    # [UI修复] 将输入框移到第 22 行，防止遮挡菜单
+    tput cup 22 0; echo -ne "${C}➤ 序号: ${W}${INPUT_BUF}_        ${NC}"
     read -t 0.05 -n 1 key
     if [[ $? -eq 0 ]]; then
         if [[ -z "$key" ]]; then
             if [[ -n "$INPUT_BUF" ]]; then
-                case $INPUT_BUF in 1)do_login;; 2)do_install;; 3)do_gui;; 5)do_update;; 0)exit 0;; esac
+                case $INPUT_BUF in
+                    1)do_login;; 2)do_install;; 3)do_gui;; 5)do_update;; 6)do_github;; 0)exit 0;;
+                esac
                 tput civis; stty -echo; draw_ui; INPUT_BUF=""
             fi
         elif [[ "$key" == $'\x7f' || "$key" == $'\b' ]]; then INPUT_BUF="${INPUT_BUF%?}"
@@ -312,5 +325,5 @@ INSTALL_EOF
 
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v35.3 更新完成！\n已启用 GitHub 下载加速，无 VPN 也能极速安装！\n输入 xxy 启动。\033[0m"
+echo -e "\033[1;32m✅ XXY v36.0 更新完成！\n修复了菜单显示不全的问题，并增加了 GitHub 浏览器。\n输入 xxy 启动。\033[0m"
 exec xxy
