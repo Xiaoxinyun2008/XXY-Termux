@@ -1,100 +1,81 @@
-# 1. 深度清理环境 (防止旧版残留干扰)
+# 1. 环境清理
 rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/tmp/.X11-unix
-rm -rf $PREFIX/tmp/.X1-lock
 
-# 2. 写入 v35.1 稳定版
+# 2. 写入脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Ultimate Edition v35.1)
-# FIX: 强健更新逻辑、IP获取修复、VNC权限修正、内存读取容错
+# PROJECT: XXY (Ultimate Edition v35.2)
+# FIX: 双重验证系统完整性、自动清理下载残留、修复检测乱码
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v35.1"
+export VERSION="v35.2"
 export UPDATE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export GITHUB_LINK="github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
-export ROOTFS_DIR="$PREFIX/var/lib/proot-distro/installed-rootfs"
+export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export TERMUX_PKG_OPTS="-y -o Dpkg::Options::=--force-confnew" 
 
 [ ! -d "$TMPDIR" ] && mkdir -p "$TMPDIR"
 
-# 颜色定义
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); P=$(tput setaf 5); C=$(tput setaf 6)
 W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 
-# 异常捕获与清理
 cleanup() {
-    tput cnorm
-    stty echo
-    rm -f "$TMPDIR"/xxy_* 2>/dev/null
+    tput cnorm; stty echo; rm -f "$TMPDIR"/xxy_* 2>/dev/null
 }
 trap cleanup EXIT INT TERM
 
-# --- 1. 基础工具函数 ---
+# --- 1. 基础函数 ---
 
-# [修复] 获取本机 IP (多重回退机制)
 get_ip() {
     local ip=""
-    # 方法1: 使用 ip route (更现代，准确率高)
-    if command -v ip >/dev/null; then
-        ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}')
-    fi
-    # 方法2: 回退到 ifconfig
+    if command -v ip >/dev/null; then ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}'); fi
     if [ -z "$ip" ] && command -v ifconfig >/dev/null; then
-        ip=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://')
+        ip=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $2}' | sed 's/addr://' | head -n 1)
     fi
     echo "${ip:-127.0.0.1}"
 }
 
-# 1.1 依赖全量自检
 check_dependencies() {
     if [ -f "$PREFIX/etc/xxy_checked" ]; then return; fi
-
-    clear
-    echo -e "${C}=== XXY 环境初始化 (首次运行) ===${NC}"
-    echo -e "${GR}正在检测依赖完整性...${NC}"
-    
-    # 增加 iproute2 用于获取 IP
+    clear; echo -e "${C}=== XXY 环境初始化 ===${NC}"
     DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch"
-    
-    # 检查 fastfetch
-    if ! command -v fastfetch &>/dev/null; then
-        echo -e "${Y}⚡ 正在安装 Fastfetch...${NC}"
-        pkg install fastfetch $TERMUX_PKG_OPTS >/dev/null 2>&1
-    fi
-
+    if ! command -v fastfetch &>/dev/null; then pkg install fastfetch $TERMUX_PKG_OPTS >/dev/null 2>&1; fi
     MISSING=""
-    for dep in $DEPS; do
-        if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi
-    done
-
-    # 特殊检查 X11
-    if ! command -v termux-x11 &>/dev/null; then
-        echo -e "${Y}📦 正在初始化 X11 仓库...${NC}"
-        pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1
-        MISSING="$MISSING termux-x11-nightly"
-    fi
-
+    for dep in $DEPS; do if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi; done
+    if ! command -v termux-x11 &>/dev/null; then pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1; MISSING="$MISSING termux-x11-nightly"; fi
     if [ -n "$MISSING" ]; then
         echo -e "${P}🛠️  正在补全组件...${NC}"
-        pkg update -y >/dev/null 2>&1
-        pkg install $MISSING $TERMUX_PKG_OPTS
-        if [ $? -ne 0 ]; then
-            echo -e "${R}❌ 依赖安装失败，请切换源或检查网络！${NC}"
-            exit 1
-        fi
+        pkg update -y >/dev/null 2>&1 && pkg install $MISSING $TERMUX_PKG_OPTS
     fi
-    
     touch "$PREFIX/etc/xxy_checked"
 }
 
-# --- 2. 容器核心逻辑 ---
+# --- 2. 容器检测核心 (双重验证) ---
+
+# [Bug修复] 权威检测系统列表
+get_systems() {
+    # 1. 使用 proot-distro list 作为权威源，屏蔽报错，去除颜色
+    local raw_list=$(proot-distro list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+    
+    # 2. 提取 Installed 列表
+    local candidates=$(echo "$raw_list" | awk '/^Installed distributions:/{flag=1; next} /^Supported distributions:/{flag=0} flag && /\*/ {print $2}')
+    
+    # 3. 校验文件系统完整性 (排除下载失败的残留)
+    for sys in $candidates; do
+        if [ -f "$ROOTFS_BASE/$sys/bin/sh" ]; then
+            echo "$sys"
+        fi
+    done
+}
+
+# --- 3. 容器脚本 ---
 
 WORKER_SCRIPT="$TMPDIR/xxy_worker_$$.sh"
 INJECT_SCRIPT="$TMPDIR/xxy_inject_$$.sh"
@@ -103,96 +84,57 @@ create_worker_script() {
     rm -f "$WORKER_SCRIPT"
     cat << 'EOF' > "$WORKER_SCRIPT"
 #!/bin/sh
-# 强制设置 PATH 防止部分发行版找不到命令
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 action=$1
-
 is_debian=false; is_arch=false; is_alpine=false
-
-if command -v apt >/dev/null; then
-    INSTALL="apt install -y"; UPDATE="apt update -y"; is_debian=true
-elif command -v pacman >/dev/null; then
-    INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"; is_arch=true
-elif command -v apk >/dev/null; then
-    INSTALL="apk add"; UPDATE="apk update"; is_alpine=true
-else
-    echo "Unknown OS"; exit 1
-fi
+if command -v apt >/dev/null; then INSTALL="apt install -y"; UPDATE="apt update -y"; is_debian=true
+elif command -v pacman >/dev/null; then INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"; is_arch=true
+elif command -v apk >/dev/null; then INSTALL="apk add"; UPDATE="apk update"; is_alpine=true
+else echo "Unknown OS"; exit 1; fi
 
 case "$action" in
   change_source)
     if [ "$is_debian" = true ]; then
-        # 针对 Ubuntu 和 Debian 进行更通用的替换
         sed -i 's/http:\/\/.*archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
         sed -i 's/http:\/\/ports.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
         sed -i 's/http:\/\/deb.debian.org/http:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list 2>/dev/null
     elif [ "$is_alpine" = true ]; then
         sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
     fi
-    $UPDATE
-    ;;
-
+    $UPDATE ;;
   install_gui)
-    if [ "$is_debian" = true ]; then
-        DEBIAN_FRONTEND=noninteractive $INSTALL xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
-    elif [ "$is_arch" = true ]; then
-        $INSTALL xfce4 dbus tigervnc
-    elif [ "$is_alpine" = true ]; then
-        $INSTALL xfce4 dbus-x11 tigervnc
-    fi
-    
-    # 强制修正 VNC 目录权限
-    mkdir -p ~/.vnc
-    echo "123456" | vncpasswd -f > ~/.vnc/passwd
-    chmod 600 ~/.vnc/passwd
-    ;;
-
+    if [ "$is_debian" = true ]; then DEBIAN_FRONTEND=noninteractive $INSTALL xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
+    elif [ "$is_arch" = true ]; then $INSTALL xfce4 dbus tigervnc
+    elif [ "$is_alpine" = true ]; then $INSTALL xfce4 dbus-x11 tigervnc; fi
+    mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;
   install_fastfetch)
     $INSTALL fastfetch || $INSTALL neofetch
     if command -v fastfetch >/dev/null; then echo "fastfetch" > /tmp/fetch_bin
     elif command -v neofetch >/dev/null; then echo "neofetch" > /tmp/fetch_bin
-    else echo "none" > /tmp/fetch_bin; fi
-    ;;
-    
+    else echo "none" > /tmp/fetch_bin; fi ;;
   install_cn)
-    if [ "$is_debian" = true ]; then
-        DEBIAN_FRONTEND=noninteractive $INSTALL locales fonts-noto-cjk ttf-wqy-zenhei
-        echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
-        echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/xxy_lang.sh
-    fi
-    ;;
+    if [ "$is_debian" = true ]; then DEBIAN_FRONTEND=noninteractive $INSTALL locales fonts-noto-cjk ttf-wqy-zenhei; echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen && locale-gen; echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/xxy_lang.sh; fi ;;
 esac
 EOF
     chmod 755 "$WORKER_SCRIPT"
 }
 
-get_systems() {
-    if [ -d "$ROOTFS_DIR" ]; then
-        ls -1 "$ROOTFS_DIR" 2>/dev/null
-    fi
-}
-
 run_task() {
     local sys=$1; local cmd=$2; local desc=$3
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
-    
-    tput cup 20 0
-    echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
-    # 捕获错误输出，防止刷屏
+    tput cup 20 0; echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
     if proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1; then
-        tput cup 20 0
-        echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"
+        tput cup 20 0; echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"
     else
-        tput cup 20 0
-        echo -ne "${R}❌ [$sys] $desc 失败 (详见日志)  ${NC}"
+        tput cup 20 0; echo -ne "${R}❌ [$sys] $desc 失败          ${NC}"
     fi
 }
 
 select_menu() {
     mapfile -t SYS_ARRAY < <(get_systems)
     if [ ${#SYS_ARRAY[@]} -eq 0 ]; then
-        echo -e "\n${R}⚠️  未检测到本地系统！${NC} (请先 [2] 安装)"
-        read -n 1 -s -r -p "按任意键返回..."
+        echo -e "\n${R}⚠️  未检测到系统！${NC} (请先 [2] 安装)"
+        read -n 1 -s -r -p "..."
         return 1
     fi
     for i in "${!SYS_ARRAY[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS_ARRAY[$i]}"; done
@@ -206,7 +148,7 @@ select_menu() {
     return 1
 }
 
-# --- 3. 功能模块 ---
+# --- 功能 ---
 
 do_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
@@ -214,16 +156,13 @@ do_login() {
     create_worker_script
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
     local inner_inject="/tmp/$(basename "$INJECT_SCRIPT")"
-    
-    echo -e "${B}正在配置启动环境...${NC}"
+    echo -e "${B}配置环境中...${NC}"
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_script" "install_fastfetch" >/dev/null 2>&1
-    
     cat > "$INJECT_SCRIPT" << 'EOF'
 RC=~/.bashrc
 [ -f /etc/profile.d/xxy_lang.sh ] && . /etc/profile.d/xxy_lang.sh
 if [ -f /tmp/fetch_bin ]; then
-    TOOL=$(cat /tmp/fetch_bin)
-    rm -f /tmp/fetch_bin
+    TOOL=$(cat /tmp/fetch_bin); rm -f /tmp/fetch_bin
     if [ "$TOOL" != "none" ] && ! grep -q "$TOOL" "$RC" 2>/dev/null; then
         echo "" >> "$RC"; echo "clear" >> "$RC"; echo "$TOOL" >> "$RC"
     fi
@@ -234,7 +173,7 @@ EOF
 }
 
 do_install() {
-    clear; echo -e "${C}=== 安装系统 (自动优化) ===${NC}"
+    clear; echo -e "${C}=== 安装系统 ===${NC}"
     DISTROS=("ubuntu" "debian" "archlinux" "alpine")
     for i in "${!DISTROS[@]}"; do echo -e "${W}$((i+1)).${NC} ${DISTROS[$i]}"; done
     echo -e "${W}0.${NC} 返回"
@@ -242,16 +181,27 @@ do_install() {
     if [ "$idx" == "0" ]; then return; fi
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
+        # [核心] 检查尸体文件
+        if [ -d "$ROOTFS_BASE/$TARGET" ]; then
+            if [ ! -f "$ROOTFS_BASE/$TARGET/bin/sh" ]; then
+                echo -e "\n${Y}清理上次安装失败的残留...${NC}"
+                proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
+            else
+                echo -e "\n${G}系统已存在！${NC}"; read -n 1 -s -r -p "..."; return
+            fi
+        fi
         echo -e "\n${Y}正在下载 $TARGET...${NC}"; tput cnorm
         if proot-distro install $TARGET; then
-            tput civis
-            create_worker_script
+            tput civis; create_worker_script
             run_task "$TARGET" "change_source" "更换国内源"
             run_task "$TARGET" "install_cn" "中文环境"
             run_task "$TARGET" "install_fastfetch" "安装工具"
-            echo -e "\n${G}🎉 安装完成！系统已优化。${NC}"; read -n 1 -s -r -p "..."
+            echo -e "\n${G}🎉 安装完成！${NC}"; read -n 1 -s -r -p "..."
         else
-            echo -e "\n${R}❌ 安装失败。请检查网络。${NC}"; read -n 1 -s -r -p "..."
+            # [核心] 失败回滚
+            echo -e "\n${R}❌ 安装失败，正在清理...${NC}"
+            proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
+            read -n 1 -s -r -p "..."
         fi
     fi
 }
@@ -260,106 +210,49 @@ do_gui() {
     clear; echo -e "${C}=== 启动桌面 ===${NC}"
     TARGET=$(select_menu) || return
     create_worker_script
-    
-    echo -ne "🔍 检查桌面组件...\r"
+    echo -ne "🔍 检查组件...\r"
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
         run_task "$TARGET" "install_gui" "安装 XFCE4 + VNC"
     fi
-
-    echo -e "\n${G}选择模式:${NC}"
-    echo -e "1. Termux:X11 ${Y}(高性能/推荐)${NC}"
-    echo -e "2. VNC Viewer ${B}(支持电脑连接)${NC}"
-    echo -e "0. 返回"
-    tput cnorm; stty echo; read -p "模式: " m; stty -echo; tput civis
-    
+    echo -e "\n${G}模式:${NC}\n1. Termux:X11 ${Y}(推荐)${NC}\n2. VNC Viewer\n0. 返回"
+    tput cnorm; stty echo; read -p "选择: " m; stty -echo; tput civis
     if [ "$m" == "1" ]; then
-        pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1
-        rm -rf "$TMPDIR/.X11-unix" 
+        pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1; rm -rf "$TMPDIR/.X11-unix"
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; sleep 1
         termux-x11 :0 >/dev/null 2>&1 &
         proot-distro login "$TARGET" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
-        
     elif [ "$m" == "2" ]; then
-        LOCAL_IP=$(get_ip)
-        echo -e "${Y}🚀 正在启动 VNC Server...${NC}"
         CMD="vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
         proot-distro login "$TARGET" -- bash -c "$CMD"
-        echo -e "\n${G}=== VNC 已启动 ===${NC}"
-        echo -e "手机连接: ${W}127.0.0.1:5901${NC}"
-        echo -e "电脑连接: ${W}${LOCAL_IP}:5901${NC}"
-        echo -e "默认密码: ${W}123456${NC}"
-        read -n 1 -s -r -p "按任意键返回..."
+        echo -e "\n${G}VNC 已启动${NC}\n手机: 127.0.0.1:5901\n局域网: $(get_ip):5901\n密码: 123456"; read -n 1 -s -r -p "..."
     fi
 }
 
-# [F5] 更新功能 (强健逻辑修复)
 do_update() {
     clear; echo -e "${C}=== 检查更新 ===${NC}"
     echo -ne "${B}连接服务器...${NC}\r"
-    
-    # 1. 使用临时文件下载，避免破坏原文件
-    local temp_file="$TMPDIR/xxy_update_tmp"
-    rm -f "$temp_file"
-    
-    # 2. 仅检测 header 避免下载整个文件 (如果支持) 或下载到临时文件
-    HTTP_CODE=$(curl -s -o "$temp_file" -w "%{http_code}" "$UPDATE_URL")
-    
-    if [ "$HTTP_CODE" != "200" ]; then
-        echo -e "\n${R}❌ 连接失败 (HTTP $HTTP_CODE)${NC}"
-        echo "请检查网络或 GitHub 连接状态。"
-        read -n 1 -s -r -p "..."
-        return
+    local temp="$TMPDIR/xxy_tmp"; rm -f "$temp"
+    if [ "$(curl -s -o "$temp" -w "%{http_code}" "$UPDATE_URL")" != "200" ]; then
+        echo -e "\n${R}❌ 网络错误${NC}"; read -n 1 -s -r -p "..."; return
     fi
-
-    # 3. 验证下载的内容是否为脚本 (防止下载到 404 页面 HTML)
-    if ! grep -q "PROJECT: XXY" "$temp_file"; then
-        echo -e "\n${R}❌ 校验失败：下载的文件无效。${NC}"
-        read -n 1 -s -r -p "..."
-        return
-    fi
-
-    # 4. 提取版本号
-    REMOTE_VER=$(grep "export VERSION=" "$temp_file" | cut -d'"' -f2)
-
-    if [[ "$REMOTE_VER" != "$VERSION" ]]; then
-        echo -e "\n${Y}🚀 发现新版本: $REMOTE_VER${NC}"
-        echo -e "当前版本: $VERSION"
-        tput cnorm; stty echo
-        read -p "确认更新? (y/n): " confirm
-        stty -echo; tput civis
-        
-        if [[ "$confirm" == "y" ]]; then
-            echo -e "${G}正在应用更新...${NC}"
-            # 5. 安全覆盖
-            mv "$temp_file" "$PREFIX/bin/xxy"
-            chmod 755 "$PREFIX/bin/xxy"
-            echo -e "${G}更新成功！请重启脚本。${NC}"
-            exit 0
-        fi
-    else
-        echo -e "\n${G}✅ 当前已是最新 ($VERSION)${NC}"
-    fi
-    rm -f "$temp_file"
+    if ! grep -q "PROJECT: XXY" "$temp"; then echo -e "\n${R}❌ 文件校验失败${NC}"; read -n 1 -s -r -p "..."; return; fi
+    REMOTE=$(grep "export VERSION=" "$temp" | cut -d'"' -f2)
+    if [[ "$REMOTE" != "$VERSION" ]]; then
+        echo -e "\n${Y}新版本: $REMOTE${NC}"; tput cnorm; stty echo; read -p "更新? (y/n): " c; stty -echo; tput civis
+        if [[ "$c" == "y" ]]; then mv "$temp" "$PREFIX/bin/xxy"; chmod 755 "$PREFIX/bin/xxy"; echo -e "${G}完成，请重启。${NC}"; exit 0; fi
+    else echo -e "\n${G}已是最新 ($VERSION)${NC}"; fi
     read -n 1 -s -r -p "..."
 }
 
-# --- UI 绘制 ---
-
+# --- Main ---
 update_status() {
-    NOW=$(date "+%H:%M")
-    IP=$(get_ip)
-    # [修复] 内存读取彻底屏蔽报错，Android 12+ 兼容
-    if (( FRAME % 50 == 0 )); then
-        MEM=$(free -m 2>/dev/null | awk 'NR==2{printf "%.1fG", $3/1024}' || echo "N/A")
-    fi
-    
+    if (( FRAME % 50 == 0 )); then MEM=$(free -m 2>/dev/null | awk 'NR==2{printf "%.1fG", $3/1024}' || echo "N/A"); fi
     tput cup 0 34; printf "${B}╭── STATUS ──────────────────────────╮${NC}"
-    tput cup 1 34; printf "${B}│${NC} TIME: ${W}%-5s${NC} MEM: ${P}%-5s${NC}         ${B}│${NC}" "$NOW" "$MEM"
-    tput cup 2 34; printf "${B}│${NC} IP: ${GR}%-15s${NC}             ${B}│${NC}" "$IP"
+    tput cup 1 34; printf "${B}│${NC} TIME: ${W}%-5s${NC} MEM: ${P}%-5s${NC}         ${B}│${NC}" "$(date "+%H:%M")" "$MEM"
+    tput cup 2 34; printf "${B}│${NC} IP: ${GR}%-15s${NC}             ${B}│${NC}" "$(get_ip)"
     tput cup 3 34; printf "${B}╰────────────────────────────────────╯${NC}"
 }
-
 draw_ui() {
     clear
     cat << EOF
@@ -374,47 +267,29 @@ ${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}5.${NC} 检�
 ${GR}──────────────────────────────────────────${NC}
 ${GR}🔗 GitHub: ${W}${GITHUB_LINK}${NC}
 EOF
-    if command -v fastfetch >/dev/null; then
-        fastfetch --config structure:OS:Kernel --logo none 2>/dev/null | sed 's/^/  /'
-    fi
+    if command -v fastfetch >/dev/null; then fastfetch --config structure:OS:Kernel --logo none 2>/dev/null | sed 's/^/  /'; fi
 }
 
-# --- 主循环 ---
-check_dependencies
-create_worker_script
-tput civis; stty -echo
-draw_ui; INPUT_BUF=""
-FRAME=0; MEM="Wait"
-
+check_dependencies; create_worker_script; tput civis; stty -echo
+draw_ui; INPUT_BUF=""; FRAME=0; MEM="Wait"
 while true; do
-    update_status
-    ((FRAME++))
-    tput cup 14 0; echo -ne "${C}➤ 请输入序号: ${W}${INPUT_BUF}_        ${NC}"
+    update_status; ((FRAME++))
+    tput cup 14 0; echo -ne "${C}➤ 序号: ${W}${INPUT_BUF}_        ${NC}"
     read -t 0.05 -n 1 key
     if [[ $? -eq 0 ]]; then
         if [[ -z "$key" ]]; then
             if [[ -n "$INPUT_BUF" ]]; then
-                case $INPUT_BUF in
-                    1) do_login ;;
-                    2) do_install ;;
-                    3) do_gui ;;
-                    5) do_update ;;
-                    0) exit 0 ;;
-                esac
+                case $INPUT_BUF in 1)do_login;; 2)do_install;; 3)do_gui;; 5)do_update;; 0)exit 0;; esac
                 tput civis; stty -echo; draw_ui; INPUT_BUF=""
             fi
-        elif [[ "$key" == $'\x7f' || "$key" == $'\b' ]]; then
-            INPUT_BUF="${INPUT_BUF%?}"
-        elif [[ "$key" == $'\e' ]]; then
-            read -t 0.01 -n 2
-        else
-            INPUT_BUF="$INPUT_BUF$key"
-        fi
+        elif [[ "$key" == $'\x7f' || "$key" == $'\b' ]]; then INPUT_BUF="${INPUT_BUF%?}"
+        elif [[ "$key" == $'\e' ]]; then read -t 0.01 -n 2
+        else INPUT_BUF="$INPUT_BUF$key"; fi
     fi
 done
 INSTALL_EOF
 
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v35.1 升级完成！\n强化了更新验证和系统兼容性。\n输入 xxy 启动。\033[0m"
+echo -e "\033[1;32m✅ XXY v35.2 更新完成！\n修复了系统残留检测Bug。\n输入 xxy 启动。\033[0m"
 exec xxy
