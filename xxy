@@ -1,91 +1,59 @@
-# 1. 清理环境
-tput cnorm
 rm -f $PREFIX/bin/xxy
-rm -rf $PREFIX/tmp/xxy_*
-
-# 2. 写入 v48.0 (UI+功能+稳定内核)
 cat > $PREFIX/bin/xxy << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-# ==============================================================================
-# PROJECT: XXY (Edition v48.0 Perfect)
-# UI: 双缓冲 Dashboard (带时间/RAM)
-# CORE: 全功能恢复 (Github/Update/Install/GUI/Login/Delete)
-# FIX: 采用适应性输入循环，解决键盘输入失效问题
-# ==============================================================================
-
-# --- 全局配置 ---
-export VERSION="v48.0"
-export REMOTE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
+export VERSION="v48.1"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
 export PD_CONF="$PREFIX/etc/proot-distro"
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export DL_CACHE="$PREFIX/var/lib/proot-distro/dlcache"
 
-# 颜色常量
+# 颜色
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
-B=$(tput setaf 4); P=$(tput setaf 5); C=$(tput setaf 6)
-W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
-
+B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 [ ! -d "$TMPDIR" ] && mkdir -p "$TMPDIR"
-cleanup() { tput cnorm; stty echo; rm -f "$TMPDIR"/xxy_* 2>/dev/null; }
-trap cleanup EXIT INT TERM
 
-# --- 1. 自动修复模块 ---
-check_health() {
-    # 自动修复配置文件丢失 (解决 Unknown command ubuntu)
-    if [ ! -f "$PD_CONF/ubuntu.sh" ]; then
-        # 静默修复
-        pkg install proot-distro -y -o Dpkg::Options::="--force-confmiss" >/dev/null 2>&1
-    fi
-
-    DEPS="pulseaudio wget curl ncurses-utils grep sed awk fastfetch net-tools termux-tools"
-    MISSING=""
-    for d in $DEPS; do command -v $d >/dev/null || MISSING="$MISSING $d"; done
-    if [ -n "$MISSING" ]; then
-        pkg install $MISSING -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
-    fi
-}
-
-# --- 2. 容器执行器 (全功能) ---
+# --- 修复: 将worker写入方式改为逐行echo，避免HereDoc缩进导致GitHub报错 ---
 create_worker() {
-    cat << 'WORKER_EOF' > "$TMPDIR/xxy_worker.sh"
-#!/bin/sh
-export PATH=$PATH:/usr/bin:/bin
-act=$1
+    rm -f "$TMPDIR/xxy_worker.sh"
+    echo '#!/bin/sh' >> "$TMPDIR/xxy_worker.sh"
+    echo 'act=$1' >> "$TMPDIR/xxy_worker.sh"
+    echo 'if [ -f /etc/alpine-release ]; then T="alpine"; PM="apk";' >> "$TMPDIR/xxy_worker.sh"
+    echo 'elif [ -f /etc/arch-release ]; then T="arch"; PM="pacman";' >> "$TMPDIR/xxy_worker.sh"
+    echo 'elif [ -f /etc/debian_version ]; then T="debian"; PM="apt";' >> "$TMPDIR/xxy_worker.sh"
+    echo 'else command -v apt >/dev/null && T="debian" || T="unknown"; fi' >> "$TMPDIR/xxy_worker.sh"
 
-if [ -f /etc/alpine-release ]; then T="alpine"; PM="apk"
-elif [ -f /etc/arch-release ]; then T="arch"; PM="pacman"
-elif [ -f /etc/debian_version ]; then T="debian"; PM="apt"
-else command -v apt >/dev/null && T="debian" || T="unknown"; fi
+    echo 'case "$act" in' >> "$TMPDIR/xxy_worker.sh"
+    
+    echo '  src)' >> "$TMPDIR/xxy_worker.sh"
+    echo '    if [ "$T" = "debian" ]; then' >> "$TMPDIR/xxy_worker.sh"
+    echo '        grep -q "ubuntu" /etc/os-release && sed -i "s|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g" /etc/apt/sources.list' >> "$TMPDIR/xxy_worker.sh"
+    echo '        apt update -y' >> "$TMPDIR/xxy_worker.sh"
+    echo '    elif [ "$T" = "alpine" ]; then' >> "$TMPDIR/xxy_worker.sh"
+    echo '        sed -i "s/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g" /etc/apk/repositories; apk update' >> "$TMPDIR/xxy_worker.sh"
+    echo '    elif [ "$T" = "arch" ]; then' >> "$TMPDIR/xxy_worker.sh"
+    echo '        echo "Server = https://mirrors.tuna.tsinghua.edu.cn/archlinuxarm/\$arch/\$repo" > /etc/pacman.d/mirrorlist' >> "$TMPDIR/xxy_worker.sh"
+    echo '        pacman -Sy --noconfirm; pacman -S --noconfirm archlinux-keyring; pacman-key --init && pacman-key --populate archlinuxarm' >> "$TMPDIR/xxy_worker.sh"
+    echo '    fi ;;' >> "$TMPDIR/xxy_worker.sh"
 
-case "$act" in
-  src) 
-    if [ "$T" = "debian" ]; then
-        grep -q "ubuntu" /etc/os-release && sed -i 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g' /etc/apt/sources.list
-        apt update -y
-    elif [ "$T" = "alpine" ]; then
-        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories; apk update
-    elif [ "$T" = "arch" ]; then
-        echo 'Server = https://mirrors.tuna.tsinghua.edu.cn/archlinuxarm/$arch/$repo' > /etc/pacman.d/mirrorlist
-        pacman -Sy --noconfirm; pacman -S --noconfirm archlinux-keyring; pacman-key --init && pacman-key --populate archlinuxarm
-    fi ;;
-  cn)
-    if [ "$T" = "debian" ]; then apt install -y locales fonts-noto-cjk; echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen; locale-gen
-    elif [ "$T" = "arch" ]; then pacman -S --noconfirm wqy-zenhei; echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen; locale-gen
-    elif [ "$T" = "alpine" ]; then apk add font-noto-cjk; fi
-    echo 'export LANG=zh_CN.UTF-8' > /etc/profile.d/cn.sh ;;
-  gui)
-    if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server
-    elif [ "$T" = "arch" ]; then pacman -S --noconfirm xfce4 dbus tigervnc
-    elif [ "$T" = "alpine" ]; then apk add xfce4 dbus-x11 tigervnc; fi
-    mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;
-  fetch)
-    if [ "$T" = "alpine" ]; then apk add fastfetch --repository=https://mirrors.ustc.edu.cn/alpine/edge/testing
-    else command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch; fi ;;
-  check) echo "ok" ;;
-esac
-WORKER_EOF
+    echo '  cn)' >> "$TMPDIR/xxy_worker.sh"
+    echo '    if [ "$T" = "debian" ]; then apt install -y locales fonts-noto-cjk; echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen; locale-gen' >> "$TMPDIR/xxy_worker.sh"
+    echo '    elif [ "$T" = "arch" ]; then pacman -S --noconfirm wqy-zenhei; echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen; locale-gen' >> "$TMPDIR/xxy_worker.sh"
+    echo '    elif [ "$T" = "alpine" ]; then apk add font-noto-cjk; fi' >> "$TMPDIR/xxy_worker.sh"
+    echo '    echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/cn.sh ;;' >> "$TMPDIR/xxy_worker.sh"
+
+    echo '  gui)' >> "$TMPDIR/xxy_worker.sh"
+    echo '    if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server' >> "$TMPDIR/xxy_worker.sh"
+    echo '    elif [ "$T" = "arch" ]; then pacman -S --noconfirm xfce4 dbus tigervnc' >> "$TMPDIR/xxy_worker.sh"
+    echo '    elif [ "$T" = "alpine" ]; then apk add xfce4 dbus-x11 tigervnc; fi' >> "$TMPDIR/xxy_worker.sh"
+    echo '    mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;' >> "$TMPDIR/xxy_worker.sh"
+
+    echo '  fetch)' >> "$TMPDIR/xxy_worker.sh"
+    echo '    if [ "$T" = "alpine" ]; then apk add fastfetch --repository=https://mirrors.ustc.edu.cn/alpine/edge/testing' >> "$TMPDIR/xxy_worker.sh"
+    echo '    else command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch; fi ;;' >> "$TMPDIR/xxy_worker.sh"
+
+    echo '  check) echo "ok" ;;' >> "$TMPDIR/xxy_worker.sh"
+    echo 'esac' >> "$TMPDIR/xxy_worker.sh"
     chmod 777 "$TMPDIR/xxy_worker.sh"
 }
 
@@ -98,183 +66,90 @@ run_task() {
     fi
 }
 
-# --- 3. 功能函数 (回归全功能) ---
+get_systems() { if [ -d "$ROOTFS_BASE" ]; then ls -1 "$ROOTFS_BASE" 2>/dev/null; fi; }
 
-get_list() { if [ -d "$ROOTFS_BASE" ]; then ls -1 "$ROOTFS_BASE" 2>/dev/null; fi; }
-
-select_ui() {
-    tput cnorm; stty echo; clear; echo -e "${C}--- 请选择系统 ---${NC}"
-    mapfile -t L < <(get_list)
-    if [ ${#L[@]} -eq 0 ]; then echo -e "\n${R}未安装任何系统！请先安装。${NC}"; read -n 1 -s; return 1; fi
+select_sys() {
+    tput cnorm; stty echo; clear; echo -e "${C}--- 选择系统 ---${NC}"
+    mapfile -t L < <(get_systems)
+    if [ ${#L[@]} -eq 0 ]; then echo -e "\n${R}未安装任何系统！${NC}"; read -n 1 -s; return 1; fi
     for i in "${!L[@]}"; do echo -e "${G}$((i+1)).${NC} ${L[$i]}"; done
     echo "0. 返回"
     read -p "选择: " c
-    [ "$c" = "0" ] || [ -z "$c" ] && return 2
+    if [ "$c" == "0" ] || [ -z "$c" ]; then return 2; fi
     if [ -n "${L[$((c-1))]}" ]; then SELECTED="${L[$((c-1))]}"; return 0; fi
     return 2
 }
 
-# [F1] 安装 (带下载保护)
+# [安装]
 do_install() {
-    tput cnorm; stty echo; clear; echo -e "${C}=== 安装中心 ===${NC}"
+    tput cnorm; stty echo; clear; echo -e "${C}=== 安装系统 ===${NC}"
     D=("ubuntu" "debian" "archlinux" "alpine")
     for i in "${!D[@]}"; do echo -e "$((i+1)). ${D[$i]}"; done
     echo "0. 返回"; read -p "选择: " idx
-    
     if [ "$idx" != "0" ] && [ -n "${D[$((idx-1))]}" ]; then
         TARGET=${D[$((idx-1))]}
-        if [ -d "$ROOTFS_BASE/$TARGET" ]; then echo -e "\n${G}已安装 ${TARGET}${NC}"; read -n 1 -s; return; fi
+        if [ -d "$ROOTFS_BASE/$TARGET" ]; then echo "${G}已安装${NC}"; read -n 1 -s; return; fi
         
-        # 关键清理: 防止坏缓存导致 CPU 报错
         rm -rf "$DL_CACHE" 2>/dev/null
-        # 修正配置: 去除代理防止 404
         [ -f "$PD_CONF/$TARGET.sh" ] && sed -i "s|https://ghproxy.net/||g" "$PD_CONF/$TARGET.sh"
-        [ -f "$PD_CONF/$TARGET.sh" ] && sed -i "s|https://mirror.ghproxy.com/||g" "$PD_CONF/$TARGET.sh"
-
-        echo -e "\n${Y}正在从官方下载 (最稳模式)...${NC}"
+        
+        echo -e "\n${Y}下载中...${NC}"
         if proot-distro install $TARGET; then
             create_worker
-            echo ""
-            run_task "$TARGET" "切换源" "src"
-            run_task "$TARGET" "配置中文" "cn"
-            run_task "$TARGET" "安装美化" "fetch"
-            echo -e "\n${G}✅ 安装完成!${NC}"; read -n 1 -s
+            run_task "$TARGET" "换源" "src"
+            run_task "$TARGET" "中文" "cn"
+            run_task "$TARGET" "美化" "fetch"
+            echo -e "\n${G}成功!${NC}"; read -n 1 -s
         else
-            echo -e "\n${R}安装失败${NC}: 请检查网络。已清除损坏文件。"; read -n 1 -s
+            echo -e "\n${R}失败${NC}"; read -n 1 -s
         fi
     fi
 }
 
-# [F2] 登录
+# [登录]
 do_login() {
-    select_ui; [ $? -ne 0 ] && return
+    select_sys; [ $? -ne 0 ] && return
     create_worker
-    # 防死机检测
-    if ! proot-distro login "$SELECTED" -- true >/dev/null 2>&1; then
-        echo -e "${R}错误: 系统无法启动(文件损坏)${NC}"; read -n 1 -s; return
-    fi
+    if ! proot-distro login "$SELECTED" -- true >/dev/null 2>&1; then echo "${R}文件损坏${NC}"; read -n 1 -s; return; fi
     RC="$TMPDIR/rc_$$"
-    echo "if [ -f /etc/profile.d/cn.sh ]; then . /etc/profile.d/cn.sh; fi; clear; if command -v fastfetch >/dev/null; then fastfetch; else neofetch 2>/dev/null; fi; /bin/bash" > "$RC"
+    echo "if [ -f /etc/profile.d/cn.sh ]; then . /etc/profile.d/cn.sh; fi; clear; command -v fastfetch >/dev/null && fastfetch; /bin/bash" > "$RC"
     proot-distro login "$SELECTED" --shared-tmp -- /bin/bash --rcfile "$RC"; rm -f "$RC"
 }
 
-# [F3] 桌面
+# [桌面]
 do_gui() {
-    select_ui; [ $? -ne 0 ] && return
+    select_sys; [ $? -ne 0 ] && return
     create_worker
-    echo -ne "${Y}检查环境...${NC}\r"
-    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then run_task "$SELECTED" "部署XFCE4桌面" "gui"; fi
-    
-    tput cnorm; stty echo; clear
-    echo -e "${G}启动模式:${NC}\n1. Termux:X11 (推荐)\n2. VNC"
-    read -p "选择: " m
+    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then run_task "$SELECTED" "部署桌面" "gui"; fi
+    tput cnorm; stty echo; clear; echo "1.Termux:X11  2.VNC"; read -p "选: " m
     if [ "$m" == "1" ]; then
         pkill -9 termux-x11 >/dev/null 2>&1; pulseaudio --kill >/dev/null 2>&1; rm -rf $TMPDIR/.X11-unix
-        if ! am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; then echo "${R}请安装Termux:X11${NC}"; read -n 1 -s; return; fi
-        sleep 1; pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; sleep 1
         termux-x11 :0 &
+        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
     elif [ "$m" == "2" ]; then
         proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1"
-        echo -e "${G}地址: 127.0.0.1:5901 | 密码: 123456${NC}"; read -n 1 -s
+        echo -e "${G}127.0.0.1:5901 | 123456${NC}"; read -n 1 -s
     fi
 }
 
-# [F4] 删除
-do_delete() {
-    select_ui; [ $? -ne 0 ] && return
-    tput cnorm; stty echo; read -p "确定删除 $SELECTED ? (yes/n): " cf
-    if [ "$cf" == "yes" ]; then proot-distro remove "$SELECTED"; rm -rf "$ROOTFS_BASE/$SELECTED"; echo "${G}已删除${NC}"; read -n 1 -s; fi
+do_del() {
+    select_sys; [ $? -ne 0 ] && return
+    read -p "删了就没了，确认吗? (y/n): " y
+    if [ "$y" == "y" ]; then proot-distro remove "$SELECTED"; rm -rf "$ROOTFS_BASE/$SELECTED"; echo "Deleted"; read -n 1 -s; fi
 }
 
-# [F5] 更新
-do_update() {
-    tput cnorm; stty echo; clear; echo "${C}检查更新...${NC}"
-    # 多源检测
-    UPD=0; TMP_U="$TMPDIR/u_xxy"
-    URLS=("https://mirror.ghproxy.com/$REMOTE_URL" "https://ghproxy.net/$REMOTE_URL" "$REMOTE_URL")
-    for u in "${URLS[@]}"; do
-        if curl -s -L -m 4 "$u" > "$TMP_U"; then if grep -q "XXY" "$TMP_U"; then UPD=1; break; fi; fi
-    done
-    if [ $UPD -eq 1 ]; then
-        RV=$(grep "export VERSION=" "$TMP_U" | cut -d'"' -f2)
-        echo -e "Local: $VERSION  Remote: $RV"
-        read -p "更新? (y/n): " y; [ "$y" == "y" ] && mv "$TMP_U" "$PREFIX/bin/xxy" && chmod 755 "$PREFIX/bin/xxy" && echo "${G}Done${NC}" && exit
-    else echo "${R}网络不可用${NC}"; fi; read -n 1 -s
-}
+do_git() { termux-open-url "https://github.com/Xiaoxinyun2008/XXY-Termux"; }
 
-# [F6] Github
-do_github() { termux-open-url "https://github.com/Xiaoxinyun2008/XXY-Termux"; }
-
-# --- 4. UI 渲染 (适应性版) ---
-draw_ui() {
-    # 静态重绘 (不含光标操作)
-    clear; echo -e "${C}"
-    echo "██╗  ██╗██╗  ██╗██╗   ██╗"
-    echo "╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝"
-    echo " ╚███╔╝  ╚███╔╝  ╚████╔╝ "
-    echo " ██╔██╗  ██╔██╗   ╚██╔╝  "
-    echo ""; draw_bar; echo ""
-    cat << EOF
-${GR}──────────────────────────────────────────${NC}
-${GR}│${NC} ${W}1.${NC} 登录系统 (Login)    ${GR}│${NC} ${W}4.${NC} 删除容器 (Delete)
-${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}5.${NC} 检查更新 (Update)
-${GR}│${NC} ${W}3.${NC} 启动桌面 (GUI)      ${GR}│${NC} ${W}6.${NC} GitHub (Web)
-${GR}──────────────────────────────────────────${NC}
-${W}  输入 0 退出程序 (Exit)${NC}
-EOF
-    if command -v fastfetch >/dev/null; then echo ""; fastfetch --logo none --config-d 2>/dev/null | head -n 5 | sed 's/^/  /'; fi
-}
-
-draw_bar() {
-    # 状态栏单独函数
-    T=$(date "+%H:%M:%S")
-    [ -z "$IP" ] && IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' || echo "Offline")
-    [ -z "$RAM" ] && RAM=$(free -m | awk 'NR==2{printf "%.1fG", $3/1024}')
-    # 格式化打印，无光标跳跃
-    printf " ${W}%-7s${NC} | ${Y}%s${NC} | IP:${W}%-15s${NC} RAM:${B}%s${NC}" "$VERSION" "$T" "$IP" "$RAM"
-}
-
-# --- 主循环 (修复：改回适应性循环，避免吞字符) ---
-check_health; tput civis; stty -echo
-draw_ui
-
+# UI Loop
 while true; do
-    # 定位到最后一行
-    tput cup $(($(tput lines)-1)) 0
-    echo -ne "${C}➤ 指令: ${W}${IN_BUF}_ ${NC}\033[K"
-    
-    # 关键修复：使用 read -t 1，降低刷新频率，留足时间给键盘输入
-    # 1秒刷新一次时钟，这样既保留了时间显示，又绝对不会吞字符
-    read -t 1 -n 1 key
-    
-    if [[ $? -eq 0 ]]; then
-        # 捕捉到按键
-        if [[ -z "$key" ]]; then
-            # 回车键 (变量为空字符串)
-            if [[ -n "$IN_BUF" ]]; then
-                case $IN_BUF in
-                    1) do_login ;; 2) do_install ;; 3) do_gui ;;
-                    4) do_delete ;; 5) do_update ;; 6) do_github ;;
-                    0) tput cnorm; clear; exit ;;
-                esac
-                # 操作完后重新获取数据并全屏重绘
-                IN_BUF=""; IP=""; RAM=""; draw_ui; tput civis; stty -echo
-            fi
-        elif [[ "$key" == $'\x7f' ]]; then IN_BUF="${IN_BUF%?}" # 退格
-        elif [[ "$key" == $'\e' ]]; then : # 忽略特殊键
-        else IN_BUF="$IN_BUF$key"; fi
-    else
-        # 超时(没按键)，只更新时钟，不全屏重绘，防止闪烁
-        tput sc; tput cup 5 0; draw_bar; tput rc
-    fi
+    clear; echo -e "${C}XXY Tool v48.1${NC}"
+    echo "1.登录 2.安装 3.桌面 4.删除 5.GitHub 0.退出"
+    echo -n "👉 "; read -t 1 -n 1 k
+    case $k in
+        1) do_login ;; 2) do_install ;; 3) do_gui ;; 4) do_del ;; 5) do_git ;; 0) exit ;;
+    esac
 done
 EOF
 
-chmod 755 $PREFIX/bin/xxy
-clear
-echo -e "\033[1;32m✅ v48.0 (最终完美版) 已修复\033[0m"
-echo -e "• 所有功能(更新/Github/GUI/删除) 已全部归位。"
-echo -e "• 已修复指令失效Bug: 现在你可以放心输入 1, 2, 3 等指令。"
-echo -e "• 已保留UI美观度: 秒级时钟、RAM信息依旧在线。"
-echo -e "\n输入 \033[1;33mxxy\033[0m 启动"
