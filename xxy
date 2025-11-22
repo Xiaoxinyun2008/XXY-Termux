@@ -1,148 +1,167 @@
 # ==============================================================================
-# 💠 XXY v8888.0 Adaptive Fusion (自适应融合版)
-# STYLE: Streaming Log UI (黑客滚动风格)
-# CORE: Auto-Retry | Smart-Clean | Process-Guard | Compatibility-Layer
+# 📱 XXY v10000.0 永恒·ADB特供版
+# 特性：ADB后台保活 | 架构智能检测 | 新手命令速查 | 绝对稳定
 # ==============================================================================
 
-# --- [Step 0] 净化序列 ---
+# --- [0] 环境初始化 ---
 tput cnorm
 clear
-echo -e "\033[1;32m[INIT] System purge sequence initiated...\033[0m"
-# 杀进程
-for p in sshd termux-x11 pulseaudio Xwayland vncserver proot; do
-    pkill -9 "$p" >/dev/null 2>&1
+echo "⚙️ [系统] 正在初始化 v10000.0 永恒版..."
+
+# 1. 深度清理冲突进程
+# 这一步是为了防止之前的 VNC 或 音频服务卡死
+for proc in sshd termux-x11 pulseaudio Xwayland vncserver proot; do
+    if pgrep -x "$proc" >/dev/null; then killall -9 "$proc" >/dev/null 2>&1; fi
 done
-# 删残留
+
+# 2. 重置脚本环境
 rm -f "$PREFIX/bin/xxy"
-rm -rf "$PREFIX/tmp/xxy_fusion"
-mkdir -p "$PREFIX/tmp/xxy_fusion"
-# 删缓存 (重要)
+rm -rf "$PREFIX/tmp/xxy_eternal"
+mkdir -p "$PREFIX/tmp/xxy_eternal"
+
+# 3. 清理 Proot 缓存 (防止安装报错的核心步骤)
 rm -rf "$PREFIX/var/lib/proot-distro/dlcache"
 rm -rf "$PREFIX/var/lib/proot-distro/download"
 
-# --- [Step 1] 写入融合核心 ---
-cat > $PREFIX/bin/xxy << 'FUSION_EOF'
+# --- [1] 注入核心代码 ---
+cat > $PREFIX/bin/xxy << 'MAIN_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
-# --- 配置层 ---
-export VERSION="v8888.0 融合版"
+# --- 全局配置 ---
+export VERSION="v10000.0 永恒版"
 export PREFIX="/data/data/com.termux/files/usr"
-export TMP="$PREFIX/tmp/xxy_fusion"
+export TMP="$PREFIX/tmp/xxy_eternal"
 export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs"
-export LOG="$TMP/sys.log"
 export LANG="C.UTF-8"
 
-# 霓虹色板
-C_R=$(tput setaf 196); C_G=$(tput setaf 46); C_Y=$(tput setaf 226)
-C_B=$(tput setaf 39);  C_P=$(tput setaf 201); C_C=$(tput setaf 51)
-C_W=$(tput setaf 255); C_GR=$(tput setaf 240); C_RST=$(tput sgr0)
+# 颜色定义 (稳健配色)
+R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
+B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); NC=$(tput sgr0)
 
-# 异常接管
-trap 'echo -e "\n${C_R}[SYSTEM HALT] 用户终止操作。${C_RST}"; exit 0' EXIT INT TERM
-
-# ==============================================================================
-# 📟 流式 UI 引擎 (Streaming UI Engine)
-# 优势：不使用光标定位，永远不会因为屏幕大小、键盘弹出而错位
-# ==============================================================================
-
-print_logo() {
-    clear
-    echo -e "${C_P}██╗  ██╗██╗  ██╗██╗   ██╗${C_RST}"
-    echo -e "${C_P}╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝${C_RST}  ${C_C}SYSTEM: ${VERSION}${C_RST}"
-    echo -e "${C_P} ╚███╔╝  ╚███╔╝  ╚████╔╝ ${C_RST}  ${C_C}STATUS: ONLINE${C_RST}"
-    echo -e "${C_P} ██╔██╗  ██╔██╗   ╚██╔╝  ${C_RST}  ${C_GR}$(date '+%Y-%m-%d %H:%M')${C_RST}"
-    echo -e "${C_GR}────────────────────────────────────────${C_RST}"
-}
-
-log_info() { echo -e "${C_B}[INFO]${C_RST} $1"; }
-log_success() { echo -e "${C_G}[ OK ]${C_RST} $1"; }
-log_warn() { echo -e "${C_Y}[WARN]${C_RST} $1"; }
-log_err() { echo -e "${C_R}[FAIL]${C_RST} $1"; }
-
-# 模拟黑客加载条
-loading_bar() {
-    local task=$1
-    echo -ne "${C_C}[TASK] $task... ${C_RST}"
-    for i in {1..5}; do
-        echo -ne "▓"
-        sleep 0.05
-    done
-    echo -e "${C_G} DONE${C_RST}"
-}
+# 异常捕获
+trap 'echo -e "\n${G}[系统] 已安全退出。${NC}"; exit 0' EXIT INT TERM
 
 # ==============================================================================
-# 🛡️ 逻辑核心 (Logic Core)
+# 🛠️ 核心工具集
 # ==============================================================================
 
-# 1. 智能网络检测
-check_network() {
-    log_info "正在扫描网络链路..."
-    if ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then
-        log_success "CN 节点连通 (阿里云)"
-        return 0
-    else
-        log_err "网络断开。请检查 WiFi/数据网络。"
-        return 1
-    fi
+# [工具1] 架构检测 (你的核心需求)
+check_arch() {
+    ARCH=$(uname -m)
+    echo -e "${C}正在检测设备硬件架构...${NC}"
+    case "$ARCH" in
+        aarch64)
+            echo -e "检测结果: ${G}aarch64 (64位 ARM)${NC}"
+            echo -e "兼容性: ${G}完美支持所有主流 Linux 发行版。${NC}"
+            echo -e "提示: 这是目前最主流的安卓手机架构，性能最强。"
+            ;;
+        armv7*|armv8l)
+            echo -e "检测结果: ${Y}armv7/armv8l (32位 ARM)${NC}"
+            echo -e "兼容性: ${Y}仅部分支持。${NC} (很多新软件可能无法安装)"
+            echo -e "提示: 您的设备较旧，建议安装 Debian 以获得最好兼容性。"
+            ;;
+        x86_64)
+            echo -e "检测结果: ${B}x86_64 (电脑/模拟器)${NC}"
+            echo -e "兼容性: ${G}完美支持。${NC}"
+            ;;
+        *)
+            echo -e "检测结果: ${R}$ARCH (未知)${NC}"
+            echo -e "兼容性: 未知，可能无法运行。"
+            ;;
+    esac
+    echo "----------------------------------------"
 }
 
-# 2. 存储熔断
-check_storage() {
-    local free=$(df -m "$PREFIX" | awk 'NR==2 {print $4}')
-    if [ "$free" -lt 2000 ]; then
-        log_err "存储空间不足 2GB ($free MB)。无法安装。"
-        return 1
-    fi
-    return 0
+# [工具2] 网络检测
+check_net() {
+    if ping -c 1 -W 2 223.5.5.5 >/dev/null 2>&1; then return 0; fi
+    echo -e "${R}❌ 网络未连接！${NC}"
+    echo "安装系统必须下载文件，请开启 WiFi/流量，并建议开启 VPN。"
+    return 1
 }
 
-# 3. 依赖自愈
+# [工具3] 依赖自检
 check_deps() {
-    if [ -f "$PREFIX/var/lib/dpkg/lock-frontend" ]; then
-        log_warn "检测到 dpkg 锁死，正在强制解锁..."
-        rm -f $PREFIX/var/lib/dpkg/lock*
-    fi
-    
-    if ! command -v proot-distro >/dev/null; then
-        log_warn "缺失核心组件 [proot-distro]"
-        loading_bar "自动补全组件"
-        pkg install proot-distro -y >/dev/null 2>&1
-    fi
-    
-    if ! command -v termux-x11 >/dev/null; then
-        log_warn "缺失图形驱动 [x11-repo]"
-        loading_bar "部署图形子系统"
-        pkg install x11-repo -y >/dev/null 2>&1
-        pkg install termux-x11-nightly -y >/dev/null 2>&1
+    local pkgs="proot-distro pulseaudio wget curl openssh ncurses-utils net-tools android-tools"
+    local missing=""
+    for p in $pkgs; do
+        if ! command -v $p >/dev/null; then missing="$missing $p"; fi
+    done
+    if [ -n "$missing" ]; then
+        echo -e "${Y}正在补全缺失组件...${NC}"
+        pkg install $missing -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
     fi
 }
 
 # ==============================================================================
-# 👷 工单系统 (Worker)
+# 🛡️ ADB 保活模块 (核心需求：永不杀后台)
+# ==============================================================================
+do_adb_keepalive() {
+    clear
+    echo -e "${C}=== 🛡️ ADB 防杀后台神器 ===${NC}"
+    echo -e "${Y}原理说明：${NC}"
+    echo "Android 12/13/14+ 有一个'幽灵进程杀手'，会强行杀掉占用过高的 Termux。"
+    echo "我们需要通过 ADB 命令禁用这个功能，才能让 Linux 永远在后台运行。"
+    echo "----------------------------------------"
+    
+    # 检测是否已经在 Termux 内配置了 ADB
+    if command -v adb >/dev/null && adb devices | grep -q "device"; then
+        echo -e "${G}✅ 检测到本机已连接 ADB！${NC}"
+        echo -e "${Y}正在尝试自动执行防杀命令...${NC}"
+        
+        adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+        adb shell "cmd appops set com.termux RUN_IN_BACKGROUND allow"
+        
+        echo -e "${G}✅ 执行完毕！您的 Termux 现在拥有不死金身。${NC}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    # 如果没有自动连接，则显示手动教程
+    echo -e "${R}未检测到 ADB 连接，请手动操作：${NC}"
+    echo -e "${W}请在【电脑】或【LADB】或【Shizuku】中输入以下 2 条命令：${NC}"
+    echo ""
+    echo -e "${G}命令 1 (禁用幽灵杀手):${NC}"
+    echo -e "adb shell \"/system/bin/device_config put activity_manager max_phantom_processes 2147483647\""
+    echo ""
+    echo -e "${G}命令 2 (允许后台运行):${NC}"
+    echo -e "adb shell \"cmd appops set com.termux RUN_IN_BACKGROUND allow\""
+    echo ""
+    echo -e "${C}提示：执行一次，永久有效（直到重启手机）。${NC}"
+    echo "----------------------------------------"
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+# ==============================================================================
+# 📦 容器内部逻辑
 # ==============================================================================
 create_worker() {
-    rm -f "$TMP/worker.sh"
-    cat >> "$TMP/worker.sh" << 'EOF'
+    cat > "$TMP/worker.sh" << 'EOF'
 #!/bin/sh
 set -e
 act=$1
+# 发行版识别
 if [ -f /etc/alpine-release ]; then T="alpine"; PM="apk"
 elif [ -f /etc/arch-release ]; then T="arch"; PM="pacman"
 elif [ -f /etc/debian_version ]; then T="debian"; PM="apt"
 else T="unknown"; fi
 
 case "$act" in
-  src) 
+  src) # 自动换源
     if [ "$T" = "debian" ]; then 
-      grep -q "tsinghua" /etc/apt/sources.list || sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+      sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
       apt update -y
+    elif [ "$T" = "alpine" ]; then
+      sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+      apk update
     fi ;;
-  clean)
-    sed -i '/fastfetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
-  gui)
+  gui) # 桌面
     if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server; fi
+    if [ "$T" = "alpine" ]; then apk add xfce4 dbus-x11 tigervnc; fi
     mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;
-  fetch)
+  clean) # 净化
+    sed -i '/fastfetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
+  fetch) # 美化
     command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch ;;
 esac
 EOF
@@ -150,220 +169,204 @@ EOF
 }
 
 # ==============================================================================
-# 🎮 业务模块
+# 🎮 业务功能
 # ==============================================================================
 
-get_sys_list() { if [ -d "$ROOTFS" ]; then ls -1 "$ROOTFS" 2>/dev/null; fi; }
-
-# [M1] 安装系统 (带重试机制)
-mod_install() {
-    print_logo
-    echo -e "${C_W}=== 系统安装向导 ===${C_RST}"
+# [M1] 系统安装 (带架构检测和命令卡片)
+do_install() {
+    clear
+    echo -e "${C}=== 系统安装向导 ===${NC}"
+    if ! check_net; then read -n 1 -s; return; fi
     
-    if ! check_storage; then read -n 1; return; fi
-    if ! check_network; then read -n 1; return; fi
+    # 1. 显示架构支持
+    check_arch
     
-    echo -e "1. Ubuntu (推荐)\n2. Debian\n3. ArchLinux\n4. Alpine\n0. 返回"
-    read -p "root@termux:~$ " idx
+    echo -e "${W}请选择要安装的系统:${NC}"
+    echo "1. Ubuntu (推荐新手)"
+    echo "2. Debian (稳定轻量)"
+    echo "3. ArchLinux (极客首选)"
+    echo "4. Alpine (极小体积)"
+    echo "0. 返回"
     
+    read -p "请输入序号: " idx
     case "$idx" in
-        1) TARGET="ubuntu" ;; 2) TARGET="debian" ;; 3) TARGET="archlinux" ;; 4) TARGET="alpine" ;;
-        0) return ;; *) log_err "输入错误"; sleep 1; return ;;
+        1) TARGET="ubuntu" ;;
+        2) TARGET="debian" ;;
+        3) TARGET="archlinux" ;;
+        4) TARGET="alpine" ;;
+        0) return ;;
+        *) echo "${R}输入错误${NC}"; sleep 1; return ;;
     esac
     
-    if [ -d "$ROOTFS/$TARGET" ]; then log_warn "系统已存在"; sleep 1; return; fi
+    # 检查是否存在
+    if [ -d "$ROOTFS/$TARGET" ]; then
+        echo -e "${Y}系统已存在！${NC}"
+        read -p "是否覆盖重装? (y/n): " cov
+        if [ "$cov" == "y" ]; then
+            proot-distro remove "$TARGET"
+        else
+            return
+        fi
+    fi
     
-    log_info "初始化下载环境..."
-    proot-distro reset "$TARGET" >/dev/null 2>&1
+    echo -e "${Y}正在清理缓存...${NC}"
     rm -rf "$PREFIX/var/lib/proot-distro/download"
     
-    log_info "开始下载 (如果进度条不动，请挂VPN)..."
+    echo -e "${C}正在下载系统镜像 (请保持网络通畅)...${NC}"
     if proot-distro install "$TARGET"; then
         # 尸检
         if [ ! -f "$ROOTFS/$TARGET/bin/sh" ]; then
-            log_err "文件校验失败 (空包)"
-            log_info "正在执行回滚操作..."
+            echo -e "${R}安装失败：下载文件损坏 (变安卓问题)。${NC}"
+            echo "请开启 VPN 后重试。"
             proot-distro remove "$TARGET"
-            read -n 1; return
+            read -n 1 -s; return
         fi
         
         create_worker
-        loading_bar "配置源优化"
+        echo -e "${G}正在进行初始化配置...${NC}"
         proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$TMP/worker.sh" "src" >/dev/null 2>&1
-        loading_bar "安装中文包"
         proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$TMP/worker.sh" "fetch" >/dev/null 2>&1
         
-        log_success "安装完成！"
-        read -n 1
+        clear
+        echo -e "${G}✅ 安装成功！${NC}"
+        echo -e "${Y}=== 📝 必须掌握的命令 (截图保存) ===${NC}"
+        echo -e "1. 更新软件:  ${W}apt update && apt upgrade${NC}"
+        echo -e "2. 安装软件:  ${W}apt install 软件名${NC}"
+        echo -e "3. 退出系统:  ${W}exit${NC}"
+        echo -e "4. 切换目录:  ${W}cd 文件夹名${NC}"
+        echo -e "5. 管理员权:  ${W}在 Proot 中你默认就是 root${NC}"
+        echo "----------------------------------------"
+        echo -e "${C}现在你可以返回主菜单选择 [1] 进入系统了。${NC}"
+        read -n 1 -s -r -p "按任意键继续..."
     else
-        log_err "下载失败 (网络超时)"
-        read -n 1
+        echo -e "${R}安装失败。${NC}"; read -n 1 -s
     fi
 }
 
-# [M2] 登录系统 (自动净化)
-mod_login() {
-    print_logo
-    echo -e "${C_W}=== 登录系统 ===${C_RST}"
-    
-    mapfile -t LIST < <(get_sys_list)
-    if [ ${#LIST[@]} -eq 0 ]; then log_err "无系统，请先安装"; sleep 1; return; fi
-    
-    for i in "${!LIST[@]}"; do echo -e "$((i+1)). ${LIST[$i]}"; done
-    echo "0. 返回"
-    
-    read -p "root@termux:~$ " idx
-    if [ "$idx" == "0" ]; then return; fi
-    
-    # 简单校验
-    if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -le "${#LIST[@]}" ]; then
-        SELECTED="${LIST[$((idx-1))]}"
-    else
-        log_err "无效序号"; sleep 1; return
-    fi
+# [M2] 登录
+do_login() {
+    # 自动寻找第一个系统
+    if [ -d "$ROOTFS" ]; then SYS=$(ls "$ROOTFS" | head -n 1); fi
+    if [ -z "$SYS" ]; then echo "${R}请先安装系统${NC}"; sleep 1; return; fi
     
     create_worker
-    loading_bar "清理配置文件"
-    proot-distro login "$SELECTED" --shared-tmp -- /bin/sh "$TMP/worker.sh" "clean" >/dev/null 2>&1
+    # 净化
+    proot-distro login "$SYS" --shared-tmp -- /bin/sh "$TMP/worker.sh" "clean" >/dev/null 2>&1
     
     clear
+    echo -e "${G}正在进入 $SYS ...${NC}"
     # 启动
-    proot-distro login "$SELECTED" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; fi; exec bash"
+    proot-distro login "$SYS" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; fi; exec bash"
 }
 
-# [M3] 启动桌面 (兼容性修复)
-mod_gui() {
-    print_logo
-    echo -e "${C_W}=== 桌面环境 ===${C_RST}"
-    
-    mapfile -t LIST < <(get_sys_list)
-    if [ ${#LIST[@]} -eq 0 ]; then log_err "无系统"; sleep 1; return; fi
-    SELECTED="${LIST[0]}" # 默认选第一个，简化流程
-    log_info "目标系统: $SELECTED"
+# [M3] 桌面
+do_gui() {
+    if [ -d "$ROOTFS" ]; then SYS=$(ls "$ROOTFS" | head -n 1); fi
+    if [ -z "$SYS" ]; then echo "${R}无系统${NC}"; sleep 1; return; fi
     
     create_worker
-    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then
-        log_warn "未检测到桌面，正在自动安装..."
-        log_info "这可能需要 3-5 分钟，请勿后台..."
-        if proot-distro login "$SELECTED" --shared-tmp -- /bin/sh "$TMP/worker.sh" "gui"; then
-            log_success "安装完成"
-        else
-            log_err "安装失败"; read -n 1; return
-        fi
+    if ! proot-distro login "$SYS" -- command -v startxfce4 >/dev/null 2>&1; then
+        echo -e "${Y}未检测到桌面，正在自动安装 XFCE4 (耗时较长)...${NC}"
+        proot-distro login "$SYS" --shared-tmp -- /bin/sh "$TMP/worker.sh" "gui"
     fi
     
-    echo -e "\n1. 本地模式 (Termux:X11)\n2. 远程模式 (VNC)\n0. 返回"
-    read -p "root@termux:~$ " m
+    clear
+    echo -e "${C}=== 启动桌面 ===${NC}"
+    echo "1. 本地模式 (需要 Termux:X11 APP)"
+    echo "2. 远程模式 (VNC Server)"
+    read -p "选择: " m
     
     if [ "$m" == "1" ]; then
-        log_info "初始化 X11 引擎..."
-        pkill -9 termux-x11 >/dev/null 2>&1
-        rm -rf "$TMP/.X11-unix"
-        
-        # 尝试唤醒，失败不报错，继续执行
+        # 强制启动不检测包名
+        echo -e "${Y}正在唤醒 Termux:X11...${NC}"
         am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-        
+        pkill -9 termux-x11 >/dev/null 2>&1
         sleep 1
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         termux-x11 :0 &
-        proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
-        
+        proot-distro login "$SYS" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
     elif [ "$m" == "2" ]; then
-        proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
-        echo -e "\n${C_G}✅ VNC 服务已启动${C_RST}"
-        echo -e "地址: 127.0.0.1:5901"
-        echo -e "密码: 123456"
-        read -n 1
+        proot-distro login "$SYS" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
+        echo -e "${G}VNC 已启动: 127.0.0.1:5901 (密码123456)${NC}"
+        read -n 1 -s
     fi
 }
 
-# [M4] 鹰眼雷达 (流式版)
-mod_ssh() {
-    while true; do
-        print_logo
-        echo -e "${C_W}=== 鹰眼雷达 (SSH) ===${C_RST}"
-        
-        USER=$(whoami)
-        IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')
-        
-        if pgrep sshd >/dev/null; then
-            echo -e "状态: ${C_G}● 运行中${C_RST}   IP: ${C_W}$IP${C_RST}"
-        else
-            echo -e "状态: ${C_R}● 已停止${C_RST}"
-        fi
-        
-        # 实时连接列表
-        echo -e "\n${C_C}[ 活跃连接 ]${C_RST}"
-        netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED' | awk '{print " -> "$5}'
-        
-        echo -e "\n1. 启动服务  2. 停止服务  3. 一键踢人  4. 修复BadPort  0. 返回"
-        read -p "root@termux:~$ " c
-        case "$c" in
-            0) return ;;
-            1) 
-                if ! grep -q "^$USER:" "$PREFIX/etc/shadow" 2>/dev/null; then
-                    log_warn "请设置密码"; passwd
-                fi
-                pkill sshd; sshd; log_success "已启动" ;;
-            2) pkill sshd; log_success "已停止" ;;
-            3) pgrep sshd | grep -v $(pgrep -o sshd) | xargs kill -9 2>/dev/null; log_warn "已踢出所有人" ;;
-            4) rm -f ~/.ssh/known_hosts; log_success "已修复 known_hosts" ;;
-        esac
-        read -n 1
-    done
+# [M4] SSH
+do_ssh() {
+    clear
+    echo -e "${C}=== SSH 管理 ===${NC}"
+    USER=$(whoami)
+    IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')
+    
+    echo -e "本机 IP: ${W}$IP${NC}"
+    echo "1. 启动服务"
+    echo "2. 停止服务"
+    read -p "选择: " s
+    if [ "$s" == "1" ]; then
+        if ! grep -q "^$USER:" "$PREFIX/etc/shadow" 2>/dev/null; then passwd; fi
+        pkill sshd; sshd
+        echo -e "${G}已启动。电脑连接: ssh -p 8022 $USER@$IP${NC}"
+    else
+        pkill sshd; echo "${R}已停止${NC}"
+    fi
+    read -n 1 -s
 }
 
-# [M5] 百科全书
-mod_wiki() {
-    print_logo
-    echo -e "${C_W}=== 📖 小白生存指南 ===${C_RST}"
-    echo -e "${C_Y}Q: 安装一直失败怎么办？${C_RST}"
-    echo -e "A: 99%是网速问题。必须挂VPN。如果没有VPN，尝试在凌晨下载。"
-    echo ""
-    echo -e "${C_Y}Q: 打开桌面是黑屏？${C_RST}"
-    echo -e "A: 你手机没装 Termux:X11 APP。请去 GitHub 下载。"
-    echo ""
-    echo -e "${C_Y}Q: 怎么在电脑连手机？${C_RST}"
-    echo -e "A: 选菜单 [4] 启动服务。电脑 CMD 输入: ssh -p 8022 $(whoami)@$(ifconfig | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')"
-    read -n 1
-}
-
-# --- 主程序循环 ---
+# --- 主循环 ---
 check_deps
 
 while true; do
-    print_logo
+    clear
+    echo -e "${C}=== XXY v10000.0 永恒·ADB特供版 ===${NC}"
+    echo -e "${W}1. 进入系统${NC}"
+    echo -e "${W}2. 安装系统 (智能架构检测)${NC}"
+    echo -e "${W}3. 启动桌面 (GUI)${NC}"
+    echo -e "${W}4. SSH 管理${NC}"
+    echo -e "${Y}5. ADB 防杀后台 (解决Termux闪退)${NC}"
+    echo -e "${R}6. 删除系统${NC}"
+    echo -e "${W}0. 退出${NC}"
+    echo "--------------------------------"
     
-    # 菜单区
-    echo -e "${C_W} [ 基础功能 ]${C_RST}             ${C_W} [ 高级功能 ]${C_RST}"
-    echo -e " ${C_B}1.${C_RST} 进入系统 (Login)       ${C_C}4.${C_RST} 鹰眼雷达 (SSH)"
-    echo -e " ${C_B}2.${C_RST} 安装系统 (Install)     ${C_C}5.${C_RST} 帮助文档 (Wiki)"
-    echo -e " ${C_B}3.${C_RST} 启动桌面 (GUI)         ${C_R}0.${C_RST} 退出程序 (Exit)"
-    echo ""
-    echo -e "${C_GR} 输入数字并按回车:${C_RST}"
+    if [ -d "$ROOTFS" ]; then
+        CNT=$(ls "$ROOTFS" | wc -l)
+        echo -e "当前已装系统数: ${G}$CNT${NC}"
+    else
+        echo -e "当前已装系统数: ${R}0${NC}"
+    fi
     
-    read -p " root@termux:~$ " choice
-    
+    read -p "👉 请输入序号: " choice
     case "$choice" in
-        1) mod_login ;;
-        2) mod_install ;;
-        3) mod_gui ;;
-        4) mod_ssh ;;
-        5) mod_wiki ;;
+        1) do_login ;;
+        2) do_install ;;
+        3) do_gui ;;
+        4) do_ssh ;;
+        5) do_adb_keepalive ;;
+        6) 
+           read -p "确定删除吗? (y/n): " k
+           if [ "$k" == "y" ]; then
+               if [ -d "$ROOTFS" ]; then
+                   S=$(ls "$ROOTFS" | head -1)
+                   proot-distro remove "$S"
+                   rm -rf "$ROOTFS/$S"
+                   echo "已删除"
+               fi
+           fi 
+           read -n 1 -s ;;
         0) exit 0 ;;
-        *) log_err "无效指令"; sleep 0.5 ;;
+        *) ;; 
     esac
 done
-FUSION_EOF
+MAIN_EOF
 
-# --- [Step 2] 启动 ---
-chmod 755 "$PREFIX/bin/xxy"
+# --- 启动 ---
+chmod 755 $PREFIX/bin/xxy
 clear
-echo -e "\033[1;32m✅ v8888.0 自适应融合版 已就绪\033[0m"
+echo -e "\033[1;32m✅ v10000.0 永恒·ADB特供版 已就绪\033[0m"
 echo -e "-------------------------------------------"
-echo -e "🔄 [UI重构] 采用流式日志风格，彻底解决排版错位"
-echo -e "🛡️ [逻辑核] 增加了下载失败自动回滚机制"
-echo -e "📱 [兼容性] 强制适配 Android 10-15"
+echo -e "🛡️ [ADB] 新增防杀后台模块 (菜单 5)"
+echo -e "📱 [CPU] 安装前自动检测架构并提示兼容性"
+echo -e "📝 [教程] 安装后自动弹出新手命令速查表"
 echo -e "-------------------------------------------"
-read -n 1 -p "按任意键启动..."
+read -n 1 -s -r -p "按任意键启动..."
 xxy
