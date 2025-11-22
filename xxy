@@ -1,249 +1,302 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# 📱 XXY v2.0 生产力增强版
-# 目标：一键部署中文 Linux 桌面环境 + Termux:X11 完美适配
+# 📱 XXY v3.0 终极生产力版
+# 核心功能：Debian + XFCE4 + 中文 + Firefox + VSCode + 免电脑维护
 # ==============================================================================
 
-# --- 全局变量 ---
-PREFIX="/data/data/com.termux/files/usr"
-HOME="/data/data/com.termux/files/home"
-DISTRO_NAME="debian" # 生产力首选 Debian，稳定且软件全
-ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
-TMP_WORKER="$PREFIX/tmp/worker_script.sh"
+# --- 全局配置 ---
+export PREFIX="/data/data/com.termux/files/usr"
+export HOME="/data/data/com.termux/files/home"
+export DISTRO_NAME="debian"
+export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
+export TMP_WORKER="$PREFIX/tmp/worker_script.sh"
 
 # 颜色定义
-R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3); B=$(tput setaf 4); NC=$(tput sgr0)
+R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3); B=$(tput setaf 4); C=$(tput setaf 6); NC=$(tput sgr0)
 
-# --- 信号捕获 ---
-trap 'echo -e "\n${G}[系统] 脚本已中断。${NC}"; exit 0' EXIT INT TERM
-
-# ==============================================================================
-# 🛠️ 辅助函数
-# ==============================================================================
-
-log() { echo -e "${G}[XXY] $1${NC}"; }
-warn() { echo -e "${Y}[提示] $1${NC}"; }
-err() { echo -e "${R}[错误] $1${NC}"; }
-
-# 检查 Termux 基础依赖
-check_termux_deps() {
-    log "检查 Termux 基础依赖..."
-    # 确保安装了 X11 仓库
-    if [ ! -f "$PREFIX/etc/apt/sources.list.d/x11.list" ]; then
-         pkg install x11-repo -y
-    fi
-    
-    PKGS="proot-distro pulseaudio termux-x11-nightly virglrenderer-android wget curl android-tools"
-    
-    # 如果找不到 termux-x11-nightly，尝试从 artifact 安装或者提示用户
-    # 这里假设用户已经添加了第三方源或使用官方 x11-repo
-    pkg install $PKGS -y -o Dpkg::Options::="--force-confnew"
-    
-    if ! command -v proot-distro >/dev/null; then
-        err "依赖安装失败，请检查网络 (建议开启 VPN)"
-        exit 1
-    fi
-}
+# 信号捕获
+trap 'echo -e "\n${G}[系统] 已退出。${NC}"; exit 0' EXIT INT TERM
 
 # ==============================================================================
-# 📦 容器内部配置生成器 (核心逻辑)
+# 🛠️ 核心：容器内部构建脚本 (Worker)
 # ==============================================================================
-
-create_internal_script() {
+# 这个脚本会在 Linux 容器内部运行，负责安装软件和配置环境
+create_worker_script() {
+    mkdir -p "$PREFIX/tmp"
     cat > "$TMP_WORKER" << 'EOF'
 #!/bin/bash
 set -e
 
-# 1. 换源 (Debian Bookworm 清华源)
-echo "[内部] 正在更换国内源..."
+# [1] 换源 (清华源 Debian Bookworm)
+echo ">>> [内部] 正在配置国内源..."
 cat > /etc/apt/sources.list << SOURCES
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free non-free-firmware
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware
 deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware
 SOURCES
 
-# 2. 更新系统 & 安装基础包
+# [2] 更新并安装基础生产力套件
+echo ">>> [内部] 正在安装桌面和浏览器 (耗时较长，请耐心等待)..."
 apt update -y
-# 避免交互式前端报错
 export DEBIAN_FRONTEND=noninteractive
-apt install -y sudo nano wget curl git dbus-x11 xfce4 xfce4-terminal \
+
+# 安装列表说明：
+# xfce4: 桌面环境 | dbus-x11: 消息总线 | firefox-esr: 浏览器
+# fonts-noto-cjk: 中文字体 | fcitx5: 输入法
+# git/wget/curl: 开发工具
+apt install -y sudo nano wget curl git build-essential \
+    xfce4 xfce4-goodies xfce4-terminal dbus-x11 \
+    firefox-esr \
     fonts-noto-cjk fonts-noto-color-emoji \
     fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
-    im-config firefox-esr
+    im-config
 
-# 3. 配置中文环境 (解决乱码的关键)
-echo "[内部] 生成中文 Locale..."
+# [3] 中文环境深度配置
+echo ">>> [内部] 生成中文 Locale..."
 apt install -y locales
 sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen zh_CN.UTF-8
 update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
 
-# 4. 配置输入法环境变量
-echo "[内部] 配置输入法..."
-cat >> /etc/profile << 'PROFILE_EOF'
+# [4] 环境变量注入 (解决输入法和显示问题)
+echo ">>> [内部] 配置环境变量..."
+cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
 export LANG=zh_CN.UTF-8
 export LC_ALL=zh_CN.UTF-8
 export GTK_IM_MODULE=fcitx
 export QT_IM_MODULE=fcitx
 export XMODIFIERS=@im=fcitx
 export DISPLAY=:0
-PROFILE_EOF
+export PULSE_SERVER=127.0.0.1
+ENV_EOF
+chmod +x /etc/profile.d/xxy_env.sh
 
-# 5. 修复 Firefox/Chromium 在 Proot 下的 Sandbox 问题
+# [5] 关键修复：Firefox 防闪退补丁
+# Proot 环境下沙盒机制会导致浏览器崩溃，必须禁用 Remote 和 Sandbox
+echo ">>> [内部] 应用 Firefox 修复补丁..."
 echo 'alias firefox="firefox-esr --no-remote"' >> /etc/bash.bashrc
+# 创建桌面快捷方式修复
+mkdir -p /usr/share/applications
+sed -i 's/Exec=firefox-esr %u/Exec=firefox-esr --no-remote %u/g' /usr/share/applications/firefox-esr.desktop 2>/dev/null || true
 
-# 6. 清理
-apt autoremove -y
-apt clean
-
-echo "[内部] 配置完成！"
+# [6] 清理
+apt autoremove -y; apt clean
+echo ">>> [内部] 基础环境构建完成！"
 EOF
     chmod +x "$TMP_WORKER"
 }
 
 # ==============================================================================
-# 🎮 主功能模块
+# 📦 功能模块：安装 VSCode
+# ==============================================================================
+install_vscode_internal() {
+    cat > "$PREFIX/tmp/vscode_install.sh" << 'EOF'
+#!/bin/bash
+echo ">>> [内部] 开始下载 VSCode (ARM64)..."
+# 使用微软官方/社区构建的 ARM64 deb 包 (这里使用 code-oss 兼容性更好，或者 vscode 官方)
+# 考虑到稳定性，我们下载官方 ARM64 deb
+cd /tmp
+wget -O vscode.deb "https://update.code.visualstudio.com/latest/linux-deb-arm64/stable"
+echo ">>> [内部] 正在安装 VSCode..."
+apt install -y ./vscode.deb
+rm vscode.deb
+# 修复启动参数 (同样需要 --no-sandbox)
+echo 'alias code="code --no-sandbox --unity-launch"' >> /etc/bash.bashrc
+sed -i 's/Exec=\/usr\/share\/code\/code/Exec=\/usr\/share\/code\/code --no-sandbox/g' /usr/share/applications/code.desktop 2>/dev/null || true
+echo ">>> [内部] VSCode 安装完成！请在终端输入 code 或在菜单中寻找。"
+EOF
+    chmod +x "$PREFIX/tmp/vscode_install.sh"
+    
+    log "正在调用容器安装 VSCode..."
+    proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$PREFIX/tmp/vscode_install.sh"
+    log "✅ VSCode 安装流程结束。"
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+# ==============================================================================
+# 🎮 主机端逻辑
 # ==============================================================================
 
-# [M1] 安装系统
+log() { echo -e "${G}[XXY] $1${NC}"; }
+err() { echo -e "${R}[错误] $1${NC}"; }
+
+# 1. 环境检查
+check_deps() {
+    log "自检运行环境..."
+    # 确保 X11 源存在
+    if [ ! -f "$PREFIX/etc/apt/sources.list.d/x11.list" ]; then
+        echo -e "${Y}添加 X11 源...${NC}"
+        pkg install x11-repo -y
+    fi
+    
+    PKGS="proot-distro pulseaudio termux-x11-nightly virglrenderer-android android-tools"
+    MISSING=""
+    for p in $PKGS; do
+        if ! command -v $p >/dev/null && ! dpkg -s $p >/dev/null 2>&1; then
+             MISSING="$MISSING $p"
+        fi
+    done
+
+    if [ -n "$MISSING" ]; then
+        log "安装缺失依赖: $MISSING"
+        pkg update -y
+        pkg install $MISSING -y -o Dpkg::Options::="--force-confnew"
+    fi
+}
+
+# 2. 系统安装 (重构版)
 do_install() {
     clear
-    log "准备安装 Debian Bookworm (生产力稳定版)..."
-    
-    # 检查网络
-    ping -c 1 223.5.5.5 >/dev/null 2>&1 || { err "无网络连接！"; return; }
-    
-    # 检查旧系统
+    log "=== 安装 Debian 生产力系统 ==="
+    ping -c 1 223.5.5.5 >/dev/null 2>&1 || { err "无网络！请检查 WiFi/流量。"; sleep 2; return; }
+
     if [ -d "$ROOTFS" ]; then
-        read -p "检测到旧系统，是否删除重装? (y/n): " confirm
-        if [ "$confirm" == "y" ]; then
+        read -p "系统已存在，是否删除重装? (y/n): " opt
+        if [ "$opt" == "y" ]; then
             proot-distro remove "$DISTRO_NAME"
         else
             return
         fi
     fi
 
-    log "正在下载系统 (请保持 VPN 开启)..."
+    log "正在下载 Rootfs (如果卡住请开启 VPN)..."
+    # 清理旧缓存以防万一
+    rm -rf "$PREFIX/var/lib/proot-distro/dlcache/$DISTRO_NAME"
+    
     if proot-distro install "$DISTRO_NAME"; then
-        # DNS 修复
+        # 写入 DNS 防止无网
         echo "nameserver 223.5.5.5" > "$ROOTFS/etc/resolv.conf"
         
-        # 执行内部配置
-        create_internal_script
-        log "正在配置中文环境和桌面 (这需要几分钟)..."
+        create_worker_script
+        log "正在进入容器配置环境 (Firefox/中文/桌面)..."
         proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$TMP_WORKER"
         
         rm -f "$TMP_WORKER"
-        log "✅ 安装完成！"
-        read -n 1 -s -r -p "按任意键返回..."
+        log "🎉 系统安装完成！"
     else
-        err "下载失败，请检查 Proot 缓存。"
-        read -n 1 -s -r -p "按任意键返回..."
+        err "下载失败。"
     fi
+    read -n 1 -s -r -p "按任意键返回..."
 }
 
-# [M2] 启动桌面 (Termux:X11 专用)
-do_start_x11() {
+# 3. 启动 X11 桌面
+do_start() {
     if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
-    
     clear
-    log "🚀 正在启动 Termux:X11 生产力环境..."
+    log "🚀 正在启动生产力桌面..."
     
-    # 1. 启动 Termux:X11 APP
-    # 强制杀死旧进程
-    pkill -f com.termux.x11 || true
-    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity
+    # A. 唤醒 App
+    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
     
-    # 2. 启动 Xwayland 服务
-    # 开启 Virgl (GPU加速)
-    log "启动 X11 服务 (Display :0)..."
-    termux-x11 :0 -ac & 
+    # B. 清理旧进程
+    killall -9 termux-x11 Xwayland pulseaudio virgl_test_server_android >/dev/null 2>&1
     
-    # 等待 X11 Socket 就绪
-    local wait_count=0
+    # C. 启动 X11 服务
+    termux-x11 :0 -ac &
+    
+    # D. 等待 Socket
+    count=0
     while [ ! -S "$PREFIX/tmp/.X11-unix/X0" ]; do
-        sleep 0.5
-        wait_count=$((wait_count+1))
-        if [ $wait_count -gt 10 ]; then err "X11 启动超时，请检查是否安装了 Termux:X11 APP"; return; fi
+        sleep 0.2
+        count=$((count+1))
+        if [ $count -gt 25 ]; then err "Termux:X11 启动超时！请检查 APP 是否安装。"; return; fi
     done
-
-    # 3. 启动音频服务
-    log "启动 PulseAudio..."
+    
+    # E. 启动硬件加速和音频
+    virgl_test_server_android &
     pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
     
-    # 4. 启动 Virgl 服务 (如果支持)
-    if command -v virgl_test_server_android >/dev/null; then
-        log "启用 GPU 硬件加速..."
-        virgl_test_server_android &
-    fi
-
-    # 5. 进入容器并启动桌面
-    log "进入桌面环境..."
-    log "⚠️  提示：如果黑屏，请点击 Termux:X11 应用内的 'Preferences -> Reseed Screen'"
+    log "正在进入桌面..."
+    log "提示：浏览器请在菜单点击 Firefox，或终端输入 firefox"
     
-    # 启动命令：设置中文环境、Display、音频、开启 Fcitx5 输入法，最后启动 XFCE4
+    # F. 登录容器
     proot-distro login "$DISTRO_NAME" --shared-tmp -- bash -c "
         export DISPLAY=:0
         export PULSE_SERVER=127.0.0.1
-        export LANG=zh_CN.UTF-8
-        export LC_ALL=zh_CN.UTF-8
-        # 启动输入法
+        # 启动输入法后台
         fcitx5 -d &
         # 启动桌面
         dbus-launch --exit-with-session startxfce4
     "
 }
 
-# [M3] 维护菜单
-do_maintenance() {
-    clear
-    echo -e "${C}=== 维护工具 ===${NC}"
-    echo "1. 强制清理缓存 (修复安装失败)"
-    echo "2. ADB 防杀后台 (推荐执行)"
-    echo "3. 卸载系统"
-    read -p "选择: " m_opt
-    case "$m_opt" in
-        1) 
-            rm -rf "$PREFIX/var/lib/proot-distro/dlcache"
-            rm -rf "$PREFIX/var/lib/proot-distro/download"
-            log "缓存已清理。" ;;
-        2)
-            log "请在电脑 ADB 或 LADB 执行以下命令："
-            echo -e "${Y}adb shell \"/system/bin/device_config put activity_manager max_phantom_processes 2147483647\"${NC}"
-            echo -e "${Y}adb shell \"cmd appops set com.termux RUN_IN_BACKGROUND allow\"${NC}"
-            ;;
-        3)
-            proot-distro remove "$DISTRO_NAME"
-            log "已卸载。" ;;
-    esac
-    read -n 1 -s -r -p "按任意键返回..."
+# 4. 免电脑维护模块
+do_adb_fix() {
+    while true; do
+        clear
+        echo -e "${C}=== 免电脑维护工具 ===${NC}"
+        echo -e "${Y}如果不执行此项，打开浏览器/VSCode 时 Termux 会闪退。${NC}"
+        echo "1. 使用 Shizuku 授权 (推荐)"
+        echo "2. 使用 无线调试 (需分屏)"
+        echo "0. 返回"
+        read -p "选择: " m
+        case "$m" in
+            1)
+                if pkg list-installed | grep -q "rish"; then
+                    cat > "$PREFIX/tmp/fix.sh" << 'EOF'
+#!/system/bin/sh
+/system/bin/device_config put activity_manager max_phantom_processes 2147483647
+cmd appops set com.termux RUN_IN_BACKGROUND allow
+echo "OK"
+EOF
+                    if rish -c "sh $PREFIX/tmp/fix.sh" | grep "OK"; then
+                        echo -e "${G}✅ 修复成功！${NC}"; 
+                    else
+                        echo -e "${R}Shizuku 执行失败。${NC}"
+                    fi
+                else
+                    echo -e "${R}未安装 rish (Shizuku终端工具)。${NC}"
+                fi
+                read -n 1 -s -r -p "按任意键..." ;;
+            2)
+                # 无线调试逻辑
+                echo -e "${Y}请开启分屏，打开 开发者选项->无线调试${NC}"
+                read -p "输入 IP:端口 (配对界面): " p_addr
+                read -p "输入 配对码: " p_code
+                adb pair "$p_addr" "$p_code"
+                echo "----------------"
+                read -p "输入 IP:端口 (主界面): " c_addr
+                adb connect "$c_addr"
+                sleep 1
+                adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+                adb shell "cmd appops set com.termux RUN_IN_BACKGROUND allow"
+                echo -e "${G}✅ 指令已发送${NC}"
+                read -n 1 -s -r -p "按任意键..." ;;
+            0) return ;;
+        esac
+    done
 }
 
 # ==============================================================================
-# 📱 主菜单
+# 📺 主菜单
 # ==============================================================================
-
-check_termux_deps
+check_deps
 
 while true; do
     clear
     echo -e "${B}┌────────────────────────────────────────┐${NC}"
-    echo -e "${B}│       XXY v2.0  生产力增强版           │${NC}"
+    echo -e "${B}│    XXY 生产力工具箱 (Termux:X11)       │${NC}"
     echo -e "${B}└────────────────────────────────────────┘${NC}"
-    echo -e "当前系统: ${G}${DISTRO_NAME}${NC} | 状态: $(if [ -d "$ROOTFS" ]; then echo "✅ 已安装"; else echo "❌ 未安装"; fi)"
+    echo -e "系统状态: $(if [ -d "$ROOTFS" ]; then echo "${G}Debian 已安装${NC}"; else echo "${R}未安装${NC}"; fi)"
     echo ""
-    echo -e "1. ${G}启动桌面环境${NC} (Termux:X11 + 中文 + 音频)"
-    echo -e "2. ${Y}安装/重装系统${NC} (Debian + 常用软件)"
-    echo -e "3. 维护工具箱"
+    echo -e "1. ${G}启动桌面环境${NC} (XFCE4 + Firefox)"
+    echo -e "2. ${Y}安装/重置系统${NC} (全自动配置中文)"
+    echo -e "3. ${C}安装 VSCode${NC} (安装系统后执行)"
+    echo -e "4. ${R}ADB 防闪退修复${NC} (免电脑)"
+    echo -e "5. 清理缓存"
     echo -e "0. 退出"
     echo ""
-    read -p "👉 请输入: " choice
+    read -p "👉 请选择: " choice
     
     case "$choice" in
-        1) do_start_x11 ;;
+        1) do_start ;;
         2) do_install ;;
-        3) do_maintenance ;;
+        3) 
+           if [ -d "$ROOTFS" ]; then install_vscode_internal; 
+           else err "请先安装系统！"; read -n 1 -s -r -p "Wait..."; fi ;;
+        4) do_adb_fix ;;
+        5) rm -rf "$PREFIX/var/lib/proot-distro/dlcache"; log "已清理"; sleep 1 ;;
         0) exit 0 ;;
         *) ;;
     esac
