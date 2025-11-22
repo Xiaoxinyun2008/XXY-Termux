@@ -1,31 +1,40 @@
 cat > $PREFIX/bin/xxy << 'EOF'
 #!/bin/bash
 # ==============================================================================
-# PROJECT: XXY (UI FIXED EDITION v31.0)
-# AUTHOR: XXY Team
-# FIX: 修复了屏幕滚动/鬼影重叠问题 (Ghosting Fix)
+# PROJECT: XXY (Optimized Edition v32.0)
+# OPTIMIZED BY: AI Assistant
+# UPDATE: 性能优化 / 自动资源清理 / 输入兼容性修复
 # ==============================================================================
 
-# --- 0. 依赖自检 ---
+# --- 0. 环境准备与清理机制 ---
+# 捕获退出信号，确保脚本结束时恢复终端状态（显示光标、开启回显）
+cleanup() {
+    tput cnorm
+    stty echo
+    rm -f "$WORKER_SCRIPT" "$INJECT_SCRIPT"
+}
+trap cleanup EXIT INT TERM
+
+# 检查依赖
 if ! command -v proot-distro &>/dev/null; then
     echo "正在初始化环境..."
     pkg update -y && pkg install proot-distro pulseaudio wget curl -y
 fi
+
+# 临时文件路径
+WORKER_SCRIPT=$(mktemp $PREFIX/tmp/xxy_worker.XXXXXX.sh)
+INJECT_SCRIPT=$(mktemp $PREFIX/tmp/xxy_inject.XXXXXX.sh)
 
 # --- 🎨 颜色定义 ---
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); P=$(tput setaf 5); C=$(tput setaf 6)
 W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 
-# --- 🧠 物理核心 ---
-get_installed_systems() {
-    ROOTFS_DIR="$PREFIX/var/lib/proot-distro/installed-rootfs"
-    if [ -d "$ROOTFS_DIR" ] && [ "$(ls -A $ROOTFS_DIR)" ]; then ls "$ROOTFS_DIR"; else echo ""; fi
-}
+# --- 🔧 核心工具函数 ---
 
-# --- 🔧 万能引擎 ---
-create_worker_script() {
-    cat > $PREFIX/tmp/xxy_worker.sh << 'WORKER_EOF'
+# 生成一次 Worker 脚本，供后续调用
+generate_worker() {
+    cat > "$WORKER_SCRIPT" << 'WORKER_EOF'
 #!/bin/sh
 task=$1
 if command -v apt >/dev/null; then PM="apt"; INSTALL="apt install -y"; UPDATE="apt update -y";
@@ -51,41 +60,78 @@ case "$task" in
         else echo "FETCH_TOOL=none" > /tmp/fetch_status; fi ;;
 esac
 WORKER_EOF
-    chmod +x $PREFIX/tmp/xxy_worker.sh
+    chmod +x "$WORKER_SCRIPT"
 }
 
+# 获取已安装系统列表
+get_installed_systems() {
+    if [ -d "$PREFIX/var/lib/proot-distro/installed-rootfs" ]; then
+        ls -A "$PREFIX/var/lib/proot-distro/installed-rootfs"
+    fi
+}
+
+# 安全后台运行
 run_bg_safe() {
     local sys=$1; local task=$2; local desc=$3
-    # 暂时恢复光标位置打印日志
     tput cup 18 0; echo -ne "${Y}⚙️  $desc ($sys)...                                ${NC}"
-    create_worker_script
-    proot-distro login "$sys" --shared-tmp -- /bin/sh /tmp/xxy_worker.sh "$task" >/dev/null 2>&1
-    tput cup 18 0; 
-    if [ $? -eq 0 ]; then echo -ne "${G}✅ $desc 完成                                  ${NC}"; else echo -ne "${R}⚠️ $desc 失败                                  ${NC}"; fi
-    rm -f $PREFIX/tmp/xxy_worker.sh
+    
+    proot-distro login "$sys" --shared-tmp -- /bin/sh "$WORKER_SCRIPT" "$task" >/dev/null 2>&1
+    
+    tput cup 18 0
+    if [ $? -eq 0 ]; then 
+        echo -ne "${G}✅ $desc 完成                                  ${NC}"
+    else 
+        echo -ne "${R}⚠️ $desc 失败                                  ${NC}"
+    fi
+}
+
+# 通用选择菜单
+select_system() {
+    SYS_LIST=($(get_installed_systems))
+    if [ ${#SYS_LIST[@]} -eq 0 ]; then echo "无系统"; read -n 1 -s -r -p "按任意键继续..."; return 1; fi
+    
+    for i in "${!SYS_LIST[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS_LIST[$i]}"; done
+    echo -e "${W}0.${NC} 返回"
+    
+    # 恢复回显以便输入
+    stty echo; tput cnorm
+    read -p "👉 序号: " idx
+    stty -echo; tput civis
+    
+    if [ "$idx" == "0" ] || [ -z "$idx" ]; then return 1; fi
+    if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#SYS_LIST[@]}" ]; then
+        echo "${SYS_LIST[$((idx-1))]}"
+        return 0
+    else
+        return 1
+    fi
 }
 
 # --- 📦 功能模块 ---
 f_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
-    SYS_LIST=$(get_installed_systems)
-    if [ -z "$SYS_LIST" ]; then echo "无系统"; read -p "..."; return; fi
-    SYS=($SYS_LIST)
-    for i in "${!SYS[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS[$i]}"; done
-    echo -e "${W}0.${NC} 返回"
-    read -p "👉 序号: " idx
-    if [ "$idx" == "0" ]; then return; fi
-    if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#SYS[@]}" ]; then
-        TARGET=${SYS[$((idx-1))]}
-        create_worker_script
-        proot-distro login "$TARGET" --shared-tmp -- /bin/sh /tmp/xxy_worker.sh "install_fetch" >/dev/null 2>&1
-        INJECTor="RC=~/.bashrc; sed -i '/fastfetch/d' \$RC; sed -i '/neofetch/d' \$RC;
-        if [ -f /tmp/fetch_status ]; then . /tmp/fetch_status; [ \"\$FETCH_TOOL\" != \"none\" ] && echo \"\$FETCH_TOOL\" >> \$RC; rm -f /tmp/fetch_status; fi"
-        echo "$INJECTor" > $PREFIX/tmp/injector.sh
-        proot-distro login "$TARGET" --shared-tmp -- /bin/sh /tmp/injector.sh >/dev/null 2>&1
-        rm $PREFIX/tmp/injector.sh
-        tput cnorm; proot-distro login $TARGET; tput civis
-    fi
+    TARGET=$(select_system) || return
+    
+    # 注入美化配置
+    proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$WORKER_SCRIPT" "install_fetch" >/dev/null 2>&1
+    
+    cat > "$INJECT_SCRIPT" << 'EOF'
+RC=~/.bashrc
+sed -i '/fastfetch/d' $RC; sed -i '/neofetch/d' $RC
+if [ -f /tmp/fetch_status ]; then 
+    . /tmp/fetch_status
+    [ "$FETCH_TOOL" != "none" ] && echo "$FETCH_TOOL" >> $RC
+    rm -f /tmp/fetch_status
+fi
+EOF
+    proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$INJECT_SCRIPT" >/dev/null 2>&1
+    
+    # 登录
+    cleanup # 恢复终端状态
+    proot-distro login "$TARGET"
+    
+    # 退出系统后重新初始化UI
+    tput civis; stty -echo; draw_static
 }
 
 f_install() {
@@ -93,67 +139,90 @@ f_install() {
     OPTS=("ubuntu" "debian" "kali" "archlinux" "alpine")
     for i in "${!OPTS[@]}"; do echo -e "${W}$((i+1)).${NC} ${OPTS[$i]}"; done
     echo -e "${W}0.${NC} 返回"
+    
+    stty echo; tput cnorm
     read -p "👉 选择: " idx
+    stty -echo; tput civis
+    
     if [ "$idx" == "0" ]; then return; fi
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#OPTS[@]}" ]; then
         TARGET=${OPTS[$((idx-1))]}
-        if [ -d "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET" ]; then echo "已存在"; read -p "..."; return; fi
-        echo "正在安装 $TARGET ..."
+        if [ -d "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET" ]; then 
+            echo "系统已存在"; read -n 1 -s -r -p "按任意键继续..."; return
+        fi
+        
+        echo "正在安装 $TARGET (可能需要几分钟)..."
+        tput cnorm
         if proot-distro install $TARGET; then
-            run_bg_safe "$TARGET" "update" "更新"
-            run_bg_safe "$TARGET" "install_cn" "中文"
-            run_bg_safe "$TARGET" "install_fetch" "美化"
-            echo -e "\n${G}完成！${NC}"; read -p "..."
+            tput civis
+            run_bg_safe "$TARGET" "update" "更新源"
+            run_bg_safe "$TARGET" "install_cn" "设置中文"
+            run_bg_safe "$TARGET" "install_fetch" "配置Fetch"
+            echo -e "\n${G}安装全部完成！${NC}"; read -n 1 -s -r -p "按任意键返回..."
+        else
+            echo -e "\n${R}安装失败${NC}"; read -n 1 -s -r -p "..."
         fi
     fi
 }
 
 f_gui() {
     clear; echo -e "${C}=== 启动桌面 ===${NC}"
-    SYS_LIST=$(get_installed_systems)
-    if [ -z "$SYS_LIST" ]; then echo "无系统"; read -p "..."; return; fi
-    SYS=($SYS_LIST)
-    for i in "${!SYS[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS[$i]}"; done
-    echo -e "${W}0.${NC} 返回"
-    read -p "👉 序号: " idx
-    if [ "$idx" == "0" ]; then return; fi
-    TARGET=${SYS[$((idx-1))]}
+    TARGET=$(select_system) || return
     
-    echo "检查环境..."
-    proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1
-    if [ $? -ne 0 ]; then run_bg_safe "$TARGET" "install_gui" "安装XFCE"; fi
+    echo "环境检查中..."
+    # 检查是否安装了 xfce4
+    if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
+        run_bg_safe "$TARGET" "install_gui" "安装 XFCE4 桌面"
+    fi
 
-    echo -e "\n1. Termux:X11\n2. VNC\n0. 返回"
+    echo -e "\n1. Termux:X11 (推荐)\n2. VNC Viewer\n0. 返回"
+    stty echo; tput cnorm
     read -p "模式: " m
+    stty -echo; tput civis
+    
     if [ "$m" == "1" ]; then
-        pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1; rm -rf $PREFIX/tmp/.X11-unix
+        # 清理 X11 环境
+        pulseaudio --kill >/dev/null 2>&1
+        pkill -f com.termux.x11 >/dev/null 2>&1
+        rm -rf $PREFIX/tmp/.X11-unix
+        
+        # 启动服务
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         termux-x11 :0 >/dev/null 2>&1 &
+        
         CMD="export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
+        echo "正在启动..."
         proot-distro login "$TARGET" --shared-tmp -- bash -c "$CMD"
     elif [ "$m" == "2" ]; then
-        proot-distro login "$TARGET" -- bash -c "vncserver -kill :1; rm -rf /tmp/.X1-lock; vncserver :1"
-        echo "地址: 127.0.0.1:5901"; read -p "..."
+        proot-distro login "$TARGET" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock; vncserver :1"
+        echo "VNC 地址: 127.0.0.1:5901"
+        read -n 1 -s -r -p "按任意键返回..."
     fi
 }
 
 f_manage() {
-    clear; SYS_LIST=$(get_installed_systems)
-    if [ -z "$SYS_LIST" ]; then echo "无系统"; read -p "..."; return; fi
-    SYS=($SYS_LIST); for i in "${!SYS[@]}"; do echo "$((i+1)). ${SYS[$i]}"; done
-    read -p "删除序号: " idx
-    TARGET=${SYS[$((idx-1))]}
-    [ ! -z "$TARGET" ] && proot-distro remove $TARGET && rm -rf "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET"
-    echo "已删除"; read -p "..."
+    clear; echo -e "${R}=== 卸载系统 ===${NC}"
+    TARGET=$(select_system) || return
+    
+    stty echo; tput cnorm
+    read -p "⚠️ 确认删除 $TARGET? (y/n): " confirm
+    stty -echo; tput civis
+    
+    if [[ "$confirm" == "y" ]]; then
+        proot-distro remove $TARGET
+        # 强制清理残留目录
+        rm -rf "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET"
+        echo "已删除"; read -n 1 -s -r -p "..."
+    fi
 }
 
-# --- UI 核心修复 (使用 printf 防止换行滚动) ---
+# --- UI 绘制核心 ---
 update_hud() {
     NOW=$(date "+%H:%M")
-    if (( FRAME % 20 == 0 )); then
+    # 降低 free 命令频率，仅在特定帧数更新，减少 CPU
+    if (( FRAME % 50 == 0 )); then
         MEM=$(free -m | awk 'NR==2{printf "%.1fG", $3/1024}')
     fi
-    # 绝对定位更新，不使用 echo 避免换行
     tput cup 0 34; printf "${B}╭── STATUS ──────────────────────────╮${NC}"
     tput cup 1 34; printf "${B}│${NC} TIME: ${W}%-5s${NC} MEM: ${P}%-5s${NC}         ${B}│${NC}" "$NOW" "$MEM"
     tput cup 2 34; printf "${B}╰────────────────────────────────────╯${NC}"
@@ -162,7 +231,7 @@ update_hud() {
 draw_static() {
     clear
     printf "${C}██╗  ██╗██╗  ██╗██╗   ██╗ ${W}XXY 终极版${NC}\n"
-    printf "${C}╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝ ${GR}v31.0 | UI Fixed${NC}\n"
+    printf "${C}╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝ ${GR}v32.0 | Optimized${NC}\n"
     printf "${C} ╚███╔╝  ╚███╔╝  ╚████╔╝  ${NC}\n"
     printf "${C} ██╔██╗  ██╔██╗   ╚██╔╝   ${NC}\n"
     
@@ -174,42 +243,57 @@ draw_static() {
     printf "${GR}╰─────────────────────────────╯ ╰─────────────────────────────╯${NC}\n"
 }
 
-# --- 主循环 ---
-tput civis # 隐藏光标
-stty -echo # 关闭回显
+# --- 主程序初始化 ---
+generate_worker  # 预先生成 Worker 脚本
+tput civis       # 隐藏光标
+stty -echo       # 关闭回显
 draw_static
-USER_IN=""; FRAME=0; COLORS=($R $Y $G $C $B $P)
+
+USER_IN=""
+FRAME=0
+COLORS=($R $Y $G $C $B $P)
+MEM="Wait"
 
 while true; do
     update_hud
     ((FRAME++))
     C_IDX=$((FRAME % 6)); CUR_C=${COLORS[$C_IDX]}
     
-    # 修复：使用绝对定位 + printf 绘制输入框，确保不产生换行符
+    # 绘制输入框
     tput cup 14 0; printf "${CUR_C}╭── 请输入序号 ──────────────────────────────────────────────╮${NC}"
     tput cup 15 0; printf "${CUR_C}│${NC} ${C}➤${NC} %-40s           ${CUR_C}│${NC}" "$USER_IN${W}█${NC}"
     tput cup 16 0; printf "${CUR_C}╰────────────────────────────────────────────────────────────╯${NC}"
 
-    read -t 0.1 -n 1 k
+    # 读取输入 (超时时间设为 0.05s 兼顾响应与性能)
+    read -t 0.05 -n 1 k
     if [[ $? -eq 0 ]]; then
-        if [[ "$k" == "" ]]; then
-            if [[ -n "$USER_IN" ]]; then
-                tput cnorm; stty echo; # 恢复光标和回显
+        if [[ -z "$k" ]]; then
+            # 如果按下了回车 (k为空但在 read 成功时通常意味着换行)
+            # 注意：在 -n 1 模式下，回车通常会被当作空字符或者不触发非零退出
+            # 这里我们主要依靠逻辑判断 USER_IN 是否有内容
+             if [[ -n "$USER_IN" ]]; then
                 case $USER_IN in
                     1) f_login ;;
                     2) f_install ;;
                     3) f_gui ;;
                     4) f_manage ;;
-                    0) clear; exit 0 ;;
+                    0) exit 0 ;;
                 esac
+                # 执行完功能后重绘界面
                 tput civis; stty -echo; draw_static; USER_IN=""
             fi
-        elif [[ "$k" == $'\x7f' ]]; then USER_IN="${USER_IN%?}"
-        elif [[ "$k" == $'\e' ]]; then read -t 0.01 -n 2
-        else USER_IN="$USER_IN$k"
+        elif [[ "$k" == $'\x7f' || "$k" == $'\b' ]]; then 
+            # 处理 Backspace (兼容 \x7f 和 \b)
+            USER_IN="${USER_IN%?}"
+        elif [[ "$k" == $'\e' ]]; then 
+            # 处理 ESC 序列防止乱码
+            read -t 0.01 -n 2
+        else 
+            # 追加字符
+            USER_IN="$USER_IN$k"
         fi
     fi
 done
 EOF
 chmod +x $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v31.0 (UI 修复版) 已安装。\n不再闪屏，画面稳定如铁！\033[0m"
+echo -e "\033[1;32m✅ XXY v32.0 (AI 优化版) 已安装。\n更流畅、更安全、更稳定！输入 xxy 启动。\033[0m"
