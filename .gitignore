@@ -1,0 +1,27 @@
+# XXY 项目 Git 忽略文件
+
+# 用户数据目录
+.xxy/
+
+# 临时文件
+*.tmp
+*.log
+*.bak
+
+# 备份文件
+*.tar.gz
+*.zip
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# 测试文件
+test/
+tmp/

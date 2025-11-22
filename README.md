@@ -1,11 +1,11 @@
-# 🚀 XXY - Termux Universal Container Manager (v32.0)
+# 🚀 XXY - Termux Universal Container Manager (v5.0)
 
 <div align="center">
 
 ![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:00C9FF,100:92FE9D&height=200&section=header&text=XXY%20Project&fontSize=80&animation=fadeIn&fontAlignY=35&desc=AI%20Optimized%20Edition%20v32.0&descAlignY=55&descAlign=50)
 
 [![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
-[![Version](https://img.shields.io/badge/Release-v32.0-blue?style=for-the-badge&logo=github)](https://github.com/)
+[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-orange?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev/)
 
@@ -23,19 +23,20 @@
 
 ## 📖 Introduction
 
-**XXY v32.0** is the definitive update to the Termux Linux container manager. Re-written with AI-assisted optimization, this version focuses on **stability, performance, and safety**.
+**XXY v5.0** is the latest enhanced version of the Termux Linux container manager. Deeply optimized with AI assistance, this version focuses on **stability, usability, and safety**.
 
 It serves as a smart wrapper around `proot-distro`, providing a **menu-driven interface** that eliminates the need for complex commands. Whether you are a beginner or a developer, XXY handles dependencies, localization, and desktop environments (GUI) automatically.
 
-### 🔥 What's New in v32.0? (Optimized)
+### 🔥 What's New in v5.0? (Enhanced)
 
 | Feature | Description |
 | :--- | :--- |
-| **⚡ CPU Optimization** | **90% less CPU usage.** Removed busy-wait loops and optimized memory checks (`free -m`) to save battery life on Android. |
-| **⌨️ Input Fixes** | **Backspace works!** Fixed the issue where deleting characters caused weird symbols (`^H`). Supports Gboard and physical keyboards. |
-| **🛡️ Safety Core** | **Auto-Recovery.** If the script crashes or is force-closed (Ctrl+C), it automatically restores the cursor and terminal echo. |
-| **🧹 Auto Cleanup** | Temporary scripts (`worker.sh`) are generated in memory and deleted instantly after use to keep your storage clean. |
-| **🎨 UI Stability** | Fixed screen flickering and ghosting issues by using absolute positioning and `printf`. |
+| **💾 Complete Backup & Restore** | **One-click backup, restore anytime.** Full system packaging and quick restoration from backups to ensure data safety. |
+| **📝 Smart Logging System** | **Full recording, easy debugging.** Automatically logs all operations and errors, with automatic cleanup of expired logs. |
+| **⚙️ Flexible Configuration** | **Personalized customization.** Support for config files to customize mirror sources, update checks, log retention, etc. |
+| **🔄 Auto Version Check** | **Stay up-to-date.** Automatically checks for new versions on startup with one-click upgrade to latest features. |
+| **📊 System Info Dashboard** | **Comprehensive monitoring.** Displays system status, backup count, log info and other key metrics. |
+| **⚡ Performance Optimization** | **Lower resource usage.** Continuously optimized code structure for reduced CPU and memory footprint. |
 
 ---
 
@@ -89,8 +90,14 @@ A: Just run xxy again and exit properly using option 0. The new v32.0 self-heali
 Q: Why is installation slow? 
 A: It depends on your network connection to the Linux mirrors. Use termux-change-repo to switch to a faster mirror.  
 
-Q: How to update to v32.0? 
-A: Simply re-run the installation command. It will overwrite the old version automatically.  
+Q: How to update to the latest version? 
+A: The program automatically checks for updates on startup. You can also manually run the installation command to overwrite the old version.
+
+Q: How to backup my system? 
+A: In the main menu, select "Maintenance" → "Backup System". The program will automatically package the entire system. Backup files are saved in `~/.xxy/backups/` directory.
+
+Q: Where are the log files? 
+A: Log files are saved in `~/.xxy/logs/` directory. The program automatically cleans up logs older than 7 days (configurable in config file).  
 
 
 🤝 Contribution
@@ -103,5 +110,11 @@ Open a Pull Request
 <div align="center">
 License
 Distributed under the GPL-3.0 License.
-<sub>Built with ❤️ by XXY Team & AI Assistant</sub>
+
+💾 **Data Safety**
+- Regularly use the backup feature to protect your data
+- Backup files can be copied to external storage devices
+- Restore operations will completely overwrite existing systems - use with caution
+
+<sub>Built with ❤️ by XXY Team & AI Assistant - v5.0 Enhanced Edition</sub>
 </div>
