@@ -1,83 +1,83 @@
 # =================================================================
-# 🚀 XXY 世界最强版 (v60.0 Ultimate) - 专为小白打造
-# 功能：自动修复 | 实时刷新 | 智能防报错 | 下载保护
+# 🚀 XXY v70.0 (全中文·小白终极修复版)
+# 特性：纯中文提示 | 智能防报错 | 32位错误自动修复 | 覆盖即更新
 # =================================================================
 
-# 1. 【深度清洁】清理所有可能导致报错的旧文件
-# (小白不用懂，这里是为了防止你之前下载失败留下的烂摊子导致报错)
+# --- 第一步：清理旧版本 (这就是“覆盖更新”的核心) ---
+# 不管你之前装的哪个版本，这一步会把旧的启动器换成新的
+# 但绝不会删除你已经安装好的 Linux 系统数据
 tput cnorm
-echo "🧹 正在清理旧环境，确保100%纯净安装..."
+echo "🧹 正在清理旧程序，准备升级到 v70.0..."
 pkill -9 sshd 2>/dev/null
 pkill -9 termux-x11 2>/dev/null
 rm -f $PREFIX/bin/xxy
 rm -rf $PREFIX/tmp/xxy_*
-# 核心修复：强制删除 Proot 下载缓存，彻底解决 "CPU不支持32位" 的误报
+
+# 强制清理可能损坏的下载缓存 (解决“CPU不支持32位”的报错根源)
 rm -rf $PREFIX/var/lib/proot-distro/dlcache
 rm -rf $PREFIX/var/lib/proot-distro/download
 
-# 2. 【写入核心程序】
+# --- 第二步：写入新代码 ---
 cat > $PREFIX/bin/xxy << 'MAIN_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-# -----------------------------------------------------------
-# 脚本核心逻辑开始
-# -----------------------------------------------------------
 
 # --- 全局配置 ---
-export VERSION="v60.0 Pro"
+export VERSION="v70.0 中文版"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
 export PD_CONF="$PREFIX/etc/proot-distro"
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export CACHE_DIR="$PREFIX/var/lib/proot-distro/dlcache"
-# 如果你有固定的更新地址，填在这里，否则留空
+
+# 这是一个留给高级用户的接口，小白保持为空即可
+# 脚本会自动判断：如果这里为空，就提示“复制粘贴来更新”
 export REMOTE_URL="" 
 
-# 颜色定义 (让界面更好看)
+# 颜色定义
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); NC=$(tput sgr0)
 
 [ ! -d "$TMPDIR" ] && mkdir -p "$TMPDIR"
-
-# 退出时自动清理垃圾
 cleanup() { tput cnorm; stty echo; rm -f "$TMPDIR"/xxy_* 2>/dev/null; }
 trap cleanup EXIT INT TERM
 
-# --- 1. 智能环境自检 (自动修复缺少的软件) ---
+# --- 1. 环境自检 (全中文) ---
 check_env() {
-    # 修复：如果你误删了配置文件，这里会自动补全
+    # 修复配置文件丢失
     if [ ! -f "$PD_CONF/ubuntu.sh" ]; then
-        echo -e "${Y}🔧 正在修复丢失的系统配置...${NC}"
+        echo -e "${Y}🔧 发现系统配置丢失，正在自动修复...${NC}"
         pkg install proot-distro -y -o Dpkg::Options::="--force-confmiss" >/dev/null 2>&1
     fi
 
-    # 检查所有依赖软件
+    # 检查依赖
     DEPS="proot-distro pulseaudio wget curl openssh ncurses-utils grep sed awk fastfetch net-tools termux-tools"
     MISSING=""
     for d in $DEPS; do command -v $d >/dev/null || MISSING="$MISSING $d"; done
     
     if [ -n "$MISSING" ]; then
-        echo -e "${C}📦 正在自动补全缺失组件:${NC} $MISSING"
-        echo -e "${Y}(第一次安装可能需要一点时间，请耐心等待...)${NC}"
+        echo -e "${C}📦 正在安装必要的组件:${NC} $MISSING"
+        echo -e "${Y}(可能会跑一堆代码，请耐心等待...)${NC}"
         pkg install $MISSING -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
     fi
     
-    # 检查是否安装了 X11 仓库
+    # 检查 X11 (图形界面支持)
     if ! command -v termux-x11 &>/dev/null; then
-        echo -e "${C}📦 正在安装图形驱动支持...${NC}"
+        echo -e "${C}📦 正在安装图形显示驱动...${NC}"
         pkg install x11-repo -y >/dev/null 2>&1
         pkg install termux-x11-nightly -y >/dev/null 2>&1
     fi
 }
 
-# --- 2. 内部工具生成器 (生成用于容器内部的脚本) ---
+# --- 2. 内部脚本生成 (容器内的操作) ---
 create_worker() {
     W_FILE="$TMPDIR/xxy_worker.sh"
     rm -f "$W_FILE"
+    # 写入头部
     echo '#!/bin/sh' >> "$W_FILE"
     echo 'export PATH=$PATH:/usr/bin:/bin' >> "$W_FILE"
     echo 'act=$1' >> "$W_FILE"
     
-    # 智能识别系统类型 (Debian/Arch/Alpine)
+    # 判断系统类型
     echo 'if [ -f /etc/alpine-release ]; then T="alpine"; PM="apk"' >> "$W_FILE"
     echo 'elif [ -f /etc/arch-release ]; then T="arch"; PM="pacman"' >> "$W_FILE"
     echo 'elif [ -f /etc/debian_version ]; then T="debian"; PM="apt"' >> "$W_FILE"
@@ -85,7 +85,7 @@ create_worker() {
     
     echo 'case "$act" in' >> "$W_FILE"
     
-    # [src] 自动换国内源 (清华/中科大)
+    # [src] 换源 (加速下载)
     echo '  src)' >> "$W_FILE"
     echo '    if [ "$T" = "debian" ]; then' >> "$W_FILE"
     echo '      grep -q "ubuntu" /etc/os-release && sed -i "s|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g" /etc/apt/sources.list' >> "$W_FILE"
@@ -97,21 +97,21 @@ create_worker() {
     echo '      pacman -Sy --noconfirm archlinux-keyring; pacman-key --init && pacman-key --populate archlinuxarm' >> "$W_FILE"
     echo '    fi ;;' >> "$W_FILE"
     
-    # [gui] 自动安装桌面环境 XFCE4
+    # [gui] 安装桌面
     echo '  gui)' >> "$W_FILE"
     echo '    if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server' >> "$W_FILE"
     echo '    elif [ "$T" = "arch" ]; then pacman -S --noconfirm xfce4 dbus tigervnc' >> "$W_FILE"
     echo '    elif [ "$T" = "alpine" ]; then apk add xfce4 dbus-x11 tigervnc; fi' >> "$W_FILE"
     echo '    mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;' >> "$W_FILE"
     
-    # [cn] 自动安装中文字体
+    # [cn] 中文环境
     echo '  cn)' >> "$W_FILE"
     echo '    if [ "$T" = "debian" ]; then apt install -y locales fonts-noto-cjk; echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen; locale-gen' >> "$W_FILE"
     echo '    elif [ "$T" = "arch" ]; then pacman -S --noconfirm wqy-zenhei; echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen; locale-gen' >> "$W_FILE"
     echo '    elif [ "$T" = "alpine" ]; then apk add font-noto-cjk; fi' >> "$W_FILE"
     echo '    echo "export LANG=zh_CN.UTF-8" > /etc/profile.d/cn.sh ;;' >> "$W_FILE"
     
-    # [fetch] 安装系统信息展示
+    # [fetch] 美化
     echo '  fetch)' >> "$W_FILE"
     echo '    if [ "$T" = "alpine" ]; then apk add fastfetch --repository=https://mirrors.ustc.edu.cn/alpine/edge/testing' >> "$W_FILE"
     echo '    else command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch; fi ;;' >> "$W_FILE"
@@ -120,216 +120,206 @@ create_worker() {
     chmod 777 "$W_FILE"
 }
 
-# 任务执行显示条
+# 执行任务并显示中文状态
 run_task() {
-    tput cup 23 0; echo -ne "${Y}⚙️  $2...${NC}\033[K"
+    tput cup 23 0; echo -ne "${Y}⚙️  正在执行: $2...${NC}\033[K"
+    # 隐藏详细日志，除非报错
     if proot-distro login "$1" --shared-tmp -- /bin/sh "$TMPDIR/xxy_worker.sh" "$3" > "$TMPDIR/log_$3.txt" 2>&1; then
-         tput cup 23 0; echo -ne "${G}✅ $2 完成${NC}\033[K"
+         tput cup 23 0; echo -ne "${G}✅ $2 成功${NC}\033[K"
     else
-         tput cup 23 0; echo -ne "${R}⚠️ $2 (跳过,详情见tmp/log)${NC}\033[K"
+         tput cup 23 0; echo -ne "${R}⚠️ $2 失败 (详情看log文件)${NC}\033[K"
     fi
 }
 
-# --- 3. 核心功能模块 ---
+# --- 3. 核心功能逻辑 ---
 
 get_systems() { if [ -d "$ROOTFS_BASE" ]; then ls -1 "$ROOTFS_BASE" 2>/dev/null; fi; }
 
-# 选择系统菜单 (带防呆逻辑)
+# 系统选择菜单 (纯中文)
 select_sys() {
-    tput cnorm; stty echo; clear; echo -e "${C}--- 已安装的系统列表 ---${NC}"
+    tput cnorm; stty echo; clear; echo -e "${C}--- 您已安装的系统 ---${NC}"
     mapfile -t LIST < <(get_systems)
     if [ ${#LIST[@]} -eq 0 ]; then 
-        echo -e "\n${R}❌ 你还没安装任何系统！${NC}"
-        echo -e "请在主菜单选择 [2] 安装系统。"; read -n 1 -s; return 1
+        echo -e "\n${R}❌ 空空如也！${NC}"
+        echo -e "请先在主菜单选择 [2] 进行安装。"; read -n 1 -s; return 1
     fi
     for i in "${!LIST[@]}"; do echo -e "${G}$((i+1)).${NC} ${LIST[$i]}"; done
     echo "0. 返回"
     echo "-------------------------"
     read -p "👉 请输入序号: " c
     
-    # [小白保护] 只能输入数字
+    # 输入校验：防止小白输错导致脚本崩溃
     if [[ ! "$c" =~ ^[0-9]+$ ]]; then return 2; fi
     [ "$c" = "0" ] && return 2
     if [ -n "${LIST[$((c-1))]}" ]; then SELECTED="${LIST[$((c-1))]}"; return 0; fi
     return 2
 }
 
-# [功能1] 安装系统 (最容易出错的地方，已加固)
+# [功能1] 安装系统 (修复了32位报错)
 do_install() {
-    tput cnorm; stty echo; clear; echo -e "${C}=== 选择要安装的系统 ===${NC}"
+    tput cnorm; stty echo; clear; echo -e "${C}=== 安装新系统 ===${NC}"
     D_NAMES=("ubuntu" "debian" "archlinux" "alpine")
     for i in "${!D_NAMES[@]}"; do echo -e "${G}$((i+1)).${NC} ${D_NAMES[$i]}"; done
     echo "0. 返回"
-    echo -e "${Y}(推荐新手选择 Ubuntu)${NC}"
-    read -p "👉 请选择: " idx
+    echo -e "${Y}(新手推荐选择 1. ubuntu)${NC}"
+    read -p "👉 请选择序号: " idx
     
-    if [[ ! "$idx" =~ ^[0-9]+$ ]]; then echo "无效输入"; sleep 0.5; return; fi
+    if [[ ! "$idx" =~ ^[0-9]+$ ]]; then echo "输入错误"; sleep 0.5; return; fi
     
     if [ "$idx" != "0" ] && [ -n "${D_NAMES[$((idx-1))]}" ]; then
         TARGET=${D_NAMES[$((idx-1))]}
-        if [ -d "$ROOTFS_BASE/$TARGET" ]; then echo "${G}这个系统你已经装过了！${NC}"; read -n 1 -s; return; fi
+        if [ -d "$ROOTFS_BASE/$TARGET" ]; then echo "${G}这个系统已经装过了，无需重复安装。${NC}"; read -n 1 -s; return; fi
         
-        # --- 核心防护: 根治 32-bit 报错 ---
-        echo -e "\n${Y}🧹 正在清理下载缓存 (防止坏包)...${NC}"
+        # --- 核心修复逻辑 ---
+        echo -e "\n${Y}🧹 正在清理环境，防止'32位'报错...${NC}"
         proot-distro reset "$TARGET" >/dev/null 2>&1
         rm -rf "$CACHE_DIR" 2>/dev/null
         rm -rf "$PREFIX/var/lib/proot-distro/download" 2>/dev/null
         
-        # 恢复官方源配置 (防止使用了失效的代理源)
+        # 还原官方源，保证下载成功率
         if [ -f "$PD_CONF/$TARGET.sh" ]; then
             sed -i "s|https://ghproxy.net/||g" "$PD_CONF/$TARGET.sh"
             sed -i "s|https://mirror.ghproxy.com/||g" "$PD_CONF/$TARGET.sh"
         fi
 
-        echo -e "\n${W}🚀 正在从官方下载系统 (这取决于你的网速)...${NC}"
-        echo -e "${Y}⚠️ 如果报错 '32-bit' 或 'Format error'，绝大多数是因为网络中断导致文件没下完。${NC}"
-        echo -e "${Y}⚠️ 请保持网络稳定或开启 VPN。${NC}\n"
+        echo -e "\n${W}🚀 开始下载系统 (全自动)...${NC}"
+        echo -e "${Y}⚠️ 注意：如果下载失败或提示 'Error'，请检查您的网络或开启 VPN。${NC}\n"
         
         if proot-distro install $TARGET; then
             create_worker
             echo ""
-            # 自动配置一条龙
-            run_task "$TARGET" "更换为国内镜像源" "src"
-            run_task "$TARGET" "安装中文语言包" "cn"
-            run_task "$TARGET" "安装系统信息秀" "fetch"
-            echo -e "\n${G}🎉 恭喜！系统安装成功！${NC}"; read -n 1 -s
+            run_task "$TARGET" "更换为国内极速源" "src"
+            run_task "$TARGET" "配置中文语言环境" "cn"
+            run_task "$TARGET" "安装系统信息插件" "fetch"
+            echo -e "\n${G}🎉 安装大功告成！按任意键返回。${NC}"; read -n 1 -s
         else
             echo -e "\n${R}❌ 下载失败！${NC}"
-            echo "原因可能是：网络超时、被墙、或存储空间不足。"
-            echo "请尝试：开启 VPN，或者换个时间再试。"
+            echo -e "原因: 网络连接被中断。"
+            echo -e "办法: 请开启 VPN (魔法) 后再试一次。"
             read -n 1 -s
         fi
     fi
 }
 
-# [功能2] 登录终端
+# [功能2] 登录
 do_login() {
     select_sys; [ $? -ne 0 ] && return
     create_worker
-    # 检测系统是否损坏
     if ! proot-distro login "$SELECTED" -- true >/dev/null 2>&1; then
-        echo "${R}❌ 无法启动：该容器文件似乎已损坏${NC}"; read -n 1 -s; return
+        echo "${R}❌ 系统文件损坏，无法启动。请尝试删除后重装。${NC}"; read -n 1 -s; return
     fi
     
-    # 临时启动配置
     RC="$TMPDIR/rc_$$"
     echo "if [ -f /etc/profile.d/cn.sh ]; then . /etc/profile.d/cn.sh; fi; clear; command -v fastfetch >/dev/null && fastfetch; /bin/bash" > "$RC"
     proot-distro login "$SELECTED" --shared-tmp -- /bin/bash --rcfile "$RC"
     rm -f "$RC"
 }
 
-# [功能3] 启动图形界面 (GUI)
+# [功能3] 图形桌面
 do_gui() {
     select_sys; [ $? -ne 0 ] && return
     create_worker
     
-    echo -ne "${Y}🔍 正在检测桌面环境...${NC}\r"
+    echo -ne "${Y}🔍 正在检查桌面环境...${NC}\r"
     if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then
         echo ""; 
-        echo -e "${C}第一次启动需要安装桌面，这需要下载 300MB+ 数据，请耐心等待...${NC}"
-        run_task "$SELECTED" "正在安装 XFCE4 桌面 (稍安勿躁)" "gui"
+        echo -e "${C}初次使用，需要安装桌面 (约300MB)，请耐心等待...${NC}"
+        run_task "$SELECTED" "安装 XFCE4 桌面" "gui"
     fi
 
-    tput cnorm; stty echo; clear; echo -e "${G}--- 启动方式选择 ---${NC}"
-    echo "1. 本地模式 (推荐: 需要安装 Termux:X11 APP)"
-    echo "2. 远程模式 (兼容: 开启 VNC 端口)"
-    read -p "👉 选择: " m
+    tput cnorm; stty echo; clear; echo -e "${G}--- 选择启动模式 ---${NC}"
+    echo "1. 手机本机玩 (推荐，需安装 Termux:X11 APP)"
+    echo "2. 电脑远程玩 (开启 VNC 端口)"
+    read -p "👉 请选择: " m
     
     if [ "$m" == "1" ]; then
-        # 清理残留进程
         pkill -9 termux-x11 >/dev/null 2>&1; pulseaudio --kill >/dev/null 2>&1; rm -rf $TMPDIR/.X11-unix
+        echo -e "${Y}正在启动 Termux:X11 APP...${NC}"
         
-        # 唤起 APP
-        echo -e "${Y}正在尝试唤起 Termux:X11 APP...${NC}"
         if ! am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; then
-             echo -e "\n${R}❌ 失败：你手机上好像没装 Termux:X11 这个APP。${NC}"
-             echo "请去 GitHub 或 F-Droid 下载安装它。"; read -n 1 -s; return
+             echo -e "\n${R}❌ 错误：您的手机未安装 Termux:X11 APP。${NC}"
+             echo "请去网上下载安装该APP后重试。"; read -n 1 -s; return
         fi
         
         sleep 1
-        # 启动音频和图形服务
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         termux-x11 :0 &
-        # 进入容器启动桌面
         proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
     
     elif [ "$m" == "2" ]; then
-        echo -e "${Y}正在重置 VNC 服务...${NC}"
+        echo -e "${Y}正在重置 VNC...${NC}"
         proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
-        echo -e "\n${G}✅ VNC 已开启！${NC}"
+        echo -e "\n${G}✅ VNC 服务已开启！${NC}"
         echo -e "地址: 127.0.0.1:5901"
         echo -e "密码: 123456"
-        echo -e "(如果要电脑连接，请结合使用主菜单的 [4] SSH 功能)"
         read -n 1 -s
     fi
 }
 
-# [功能4] 电脑远程连接 (SSH)
+# [功能4] SSH 远程
 do_ssh_remote() {
     tput cnorm; stty echo; clear
-    echo -e "${C}=== SSH 电脑远程连接助手 ===${NC}"
+    echo -e "${C}=== 电脑连接手机助手 (SSH) ===${NC}"
     
     if ! command -v sshd >/dev/null; then
-        echo -e "${Y}正在安装 OpenSSH Server...${NC}"
+        echo -e "${Y}正在安装 SSH 组件...${NC}"
         pkg install openssh -y >/dev/null 2>&1
     fi
     
-    echo "让你可以用电脑的 CMD 或 PuTTY 控制手机 Termux"
-    echo "1. 设置连接密码 (必做)"
-    echo "2. 开启 SSH 服务"
-    echo "3. 关闭 SSH 服务"
+    echo "1. 设置连接密码 (必选)"
+    echo "2. 开启服务"
+    echo "3. 关闭服务"
     echo "0. 返回"
     read -p "选择: " s
     
     case "$s" in
-        1) echo -e "\n${Y}👇 请输入你要设置的密码 (输入时不会显示，输完回车):${NC}"; passwd; read -p "密码已设置。按回车继续..." ;;
+        1) echo -e "\n${Y}👇 请输入密码 (输入时看不见是正常的，输完按回车):${NC}"; passwd; read -p "密码设置完成。按回车继续..." ;;
         2) 
            pkill sshd; sshd
            IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $2}' | sed 's/addr://' | head -n 1)
            USER=$(whoami)
-           echo -e "\n${G}✅ SSH 服务运行中！${NC}"
-           echo -e "-----------------------------------------------"
-           echo -e "💻 电脑端连接指令: ssh -p 8022 $USER@$IP"
-           echo -e "🔑 密码: (你刚才设置的)"
-           echo -e "-----------------------------------------------"
+           echo -e "\n${G}✅ SSH 已开启！${NC}"
+           echo -e "电脑连接指令: ssh -p 8022 $USER@$IP"
            read -p "按回车返回..." ;;
-        3) pkill sshd; echo -e "${R}SSH 服务已停止${NC}"; read -n 1 -s ;;
+        3) pkill sshd; echo -e "${R}SSH 已关闭${NC}"; read -n 1 -s ;;
     esac
 }
 
+# [功能5] 删除
 do_del() {
     select_sys; [ $? -ne 0 ] && return
-    echo -e "${R}⚠️  警告：这将永久删除 ${SELECTED} 系统里的所有数据！${NC}"
-    read -p "确定要删除吗? (输入 y 确认): " k
+    echo -e "${R}⚠️  警告：这将永久删除该系统内的所有文件！${NC}"
+    read -p "确认删除吗? (输入 y 确认): " k
     if [ "$k" == "y" ]; then 
         proot-distro remove "$SELECTED"
         rm -rf "$ROOTFS_BASE/$SELECTED"
-        echo "🗑️ 已彻底删除"; read -n 1 -s
+        echo "🗑️ 已删除"; read -n 1 -s
     fi
 }
 
-# [功能6] 检查更新 (修复版)
+# [功能6] 更新说明 (解决小白不知道怎么更新的问题)
 do_update() {
-    tput cnorm; stty echo; clear; echo "${C}正在联网检查更新...${NC}"
+    tput cnorm; stty echo; clear; echo "${C}--- 检查更新 ---${NC}"
     
     if [ -z "$REMOTE_URL" ]; then
-        echo "${R}❌ 未配置更新地址${NC}"
-        echo "提示：这是一个本地脚本。如果你有新的脚本链接，请编辑文件填入 REMOTE_URL。"
-        read -n 1 -s; return
-    fi
-
-    echo "${Y}正在下载...${NC}"
-    curl -s -L "$REMOTE_URL" -o "$TMPDIR/u.sh"
-    
-    # 安全校验：确保下载的是个脚本，不是报错网页
-    if head -n 1 "$TMPDIR/u.sh" | grep -q "^#!" || grep -q "MAIN_EOF" "$TMPDIR/u.sh"; then
-         mv "$TMPDIR/u.sh" "$PREFIX/bin/xxy"
-         chmod 755 "$PREFIX/bin/xxy"
-         echo "${G}✅ 更新成功！重启后生效。${NC}"
-         exit 0
-    else 
-         echo "${R}❌ 更新失败：下载文件无效。${NC}"
-         rm -f "$TMPDIR/u.sh"
+        echo -e "${Y}ℹ️  当前为【手动代码版】${NC}"
+        echo -e "\n❓ \033[1;33m如果我想更新，该怎么做？\033[0m"
+        echo -e "1. 找到最新的代码（比如你现在看到的这段代码）。"
+        echo -e "2. 复制它。"
+        echo -e "3. 在 Termux 里直接粘贴并回车。"
+        echo -e "\n✨ \033[1;32m放心，这样操作是【覆盖更新】，\033[0m"
+        echo -e "\033[1;32m不会删除你已经装好的系统和数据！\033[0m"
+    else
+        # 如果有URL (高级用户)，则尝试下载
+        echo "${Y}正在尝试联网下载更新...${NC}"
+        curl -s -L "$REMOTE_URL" -o "$TMPDIR/u.sh"
+        if head -n 1 "$TMPDIR/u.sh" | grep -q "^#!" || grep -q "MAIN_EOF" "$TMPDIR/u.sh"; then
+             mv "$TMPDIR/u.sh" "$PREFIX/bin/xxy"
+             chmod 755 "$PREFIX/bin/xxy"
+             echo "${G}✅ 更新成功！即将重启脚本...${NC}"; sleep 1; exec "$PREFIX/bin/xxy"
+        else 
+             echo "${R}❌ 更新失败：源文件无效。${NC}"; rm -f "$TMPDIR/u.sh"
+        fi
     fi
     read -n 1 -s
 }
@@ -342,11 +332,50 @@ draw() {
     IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://'); [ -z "$IP" ] && IP="离线"
     MEM=$(free -m | awk 'NR==2{printf "%.1fG", $3/1024}')
     
-    # 界面布局
     printf " ${W}版本:${NC} ${Y}%-7s${NC} | ${W}时间:${NC} ${Y}%s${NC}\n" "$VERSION" "$T"
     printf " ${W}本地IP:${NC} %-14s ${W}内存:${NC} ${B}%s${NC}\n" "$IP" "$MEM"
     echo -e "${GR}──────────────────────────────────────────${NC}"
-    echo -e " ${W}[1] 登录系统${NC}     ${W}[4] 电脑远程连接 (SSH)${NC}"
+    echo -e " ${W}[1] 进入系统${NC}     ${W}[4] 电脑远程连接${NC}"
     echo -e " ${W}[2] 安装系统${NC}     ${W}[5] 删除系统${NC}"
-    echo -e " ${W}[3] 启动桌面${NC}     ${W}[6] 检查更新${NC}"
-    echo -e "${GR}────────────
+    echo -e " ${W}[3] 启动桌面${NC}     ${W}[6] 如何更新?${NC}"
+    echo -e "${GR}──────────────────────────────────────────${NC}"
+    echo -e "${W} [0] 退出${NC}"
+}
+
+# --- 主循环 ---
+check_env
+while true; do
+    draw
+    echo -e "${C}➤ 请输入数字序号 (自动刷新):${NC}"
+    
+    # 1秒超时，实现界面时间跳动
+    read -t 1 -n 1 choice
+    STATUS=$?
+    
+    if [ $STATUS -ne 0 ] || [ -z "$choice" ]; then continue; fi
+
+    case "$choice" in
+        1) do_login ;; 
+        2) do_install ;; 
+        3) do_gui ;;
+        4) do_ssh_remote ;; 
+        5) do_del ;; 
+        6) do_update ;; 
+        0) exit 0 ;;
+        *) echo " 输入无效"; sleep 0.5 ;;
+    esac
+done
+MAIN_EOF
+
+# 3. 启动
+chmod 755 $PREFIX/bin/xxy
+clear
+echo -e "\033[1;32m✅ 汉化修复版 v70.0 安装成功！\033[0m"
+echo -e "-------------------------------------------"
+echo -e "以后只需输入 \033[1;33mxxy\033[0m 即可启动。"
+echo -e "-------------------------------------------"
+echo -e "提示：如果之前有老版本无法更新，"
+echo -e "现在这个版本已经覆盖修复了它，直接用就行！"
+echo -e "按回车启动..."
+read
+xxy
