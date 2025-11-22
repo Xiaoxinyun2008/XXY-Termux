@@ -314,7 +314,7 @@ xxy → 3 → 6  # 查看系统信息
 ### 反馈问题
 1. 查看日志文件
 2. 记录错误信息
-3. 在 GitHub 提交 Issue
+3. [在 GitHub 提交 Issue](https://github.com/Xiaoxinyun2008/XXY-Termux/issues)
 
 ---
 

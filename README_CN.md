@@ -4,8 +4,8 @@
 
 ![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:00C9FF,100:92FE9D&height=200&section=header&text=XXY%20Project&fontSize=80&animation=fadeIn&fontAlignY=35&desc=%E4%B8%93%E4%B8%BATermux%E6%89%93%E9%80%A0%E7%9A%84Linux%E7%AE%A1%E7%90%86%E5%99%A8&descAlignY=55&descAlign=50)
 
-[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
-[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/)
+[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/Xiaoxinyun2008/XXY-Termux)
+[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/Xiaoxinyun2008/XXY-Termux/releases)
 [![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-orange?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev/)
 
@@ -104,11 +104,11 @@ A: 日志文件保存在 `~/.xxy/logs/` 目录中。程序会自动清理 7 天�
 
 🤝 参与贡献
 我们非常欢迎社区贡献！如果您有好的想法，请按以下步骤操作：
-复刻 (Fork) 本项目
+[复刻 (Fork) 本项目](https://github.com/Xiaoxinyun2008/XXY-Termux/fork)
 创建您的特性分支 (git checkout -b feature/新功能)
 提交您的更改 (git commit -m '添加了某个很棒的功能')
 推送到分支 (git push origin feature/新功能)
-发起拉取请求 (Pull Request)
+[发起拉取请求 (Pull Request)](https://github.com/Xiaoxinyun2008/XXY-Termux/pulls)
 <div align="center">
 开源协议
 本项目遵循 GPL-3.0 协议发布。
