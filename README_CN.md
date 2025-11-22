@@ -21,6 +21,16 @@
 
 ---
 
+## 📚 文档导航
+
+> 📖 **更多文档资源**
+>
+> - 📋 **[更新日志 / CHANGELOG](CHANGELOG.md)** - 查看版本更新历史和新功能
+> - 🚀 **[快速开始 / Quick Start](QUICKSTART.md)** - 快速上手指南和使用技巧
+> - ✨ **[改进总结 / Improvements](IMPROVEMENTS.md)** - 详细的功能改进说明
+
+---
+
 ## 📖 项目简介
 
 **XXY v5.0** 是 Termux Linux 容器管理器的最新增强版本。本次更新由 AI 深度优化，核心专注于 **稳定性、易用性与安全性**。

@@ -21,6 +21,16 @@
 
 ---
 
+## 📚 Documentation
+
+> 📖 **Additional Resources**
+>
+> - 📋 **[Changelog / 更新日志](CHANGELOG.md)** - View version history and new features
+> - 🚀 **[Quick Start / 快速开始](QUICKSTART.md)** - Getting started guide and tips
+> - ✨ **[Improvements / 改进总结](IMPROVEMENTS.md)** - Detailed feature improvements
+
+---
+
 ## 📖 Introduction
 
 **XXY v5.0** is the latest enhanced version of the Termux Linux container manager. Deeply optimized with AI assistance, this version focuses on **stability, usability, and safety**.
