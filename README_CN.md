@@ -19,6 +19,14 @@
 >
 > 👉 **[🇺🇸 点击此处查看英文文档 / English Documentation](README.md)**
 
+## 📚 文档索引
+
+| 文档 | 用途 |
+| :--- | :--- |
+| [QUICKSTART.md](QUICKSTART.md) | 中文快速上手指南，涵盖首次安装、桌面启动、备份/恢复与日志排查步骤。 |
+| [CHANGELOG.md](CHANGELOG.md) | 详细版本更新记录，可了解每次发布的功能、修复与升级建议。 |
+| [IMPROVEMENTS.md](IMPROVEMENTS.md) | v5.0 AI 辅助改进总览，包含架构优化、数据对比及未来规划方向。 |
+
 ---
 
 ## 📖 项目简介

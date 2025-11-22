@@ -19,6 +19,14 @@
 >
 > 👉 **[🇨🇳 点击这里查看中文文档 / Chinese Documentation](README_CN.md)**
 
+## 📚 Documentation Hub
+
+| Document | Purpose |
+| :--- | :--- |
+| [QUICKSTART.md](QUICKSTART.md) | Hands-on (Chinese) quickstart that walks through first install, GUI launch, backups, and troubleshooting flows. |
+| [CHANGELOG.md](CHANGELOG.md) | Full release history with major features, fixes, and upgrade guidance for each version. |
+| [IMPROVEMENTS.md](IMPROVEMENTS.md) | Deep dive into the AI-assisted refactor, including architecture notes, metrics, and future roadmap ideas. |
+
 ---
 
 ## 📖 Introduction
