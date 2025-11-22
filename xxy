@@ -1,29 +1,32 @@
+# 强制转换行尾格式并写入文件 (修复 Windows 编辑导致的报错)
 cat > $PREFIX/bin/xxy << 'EOF'
-#!/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # PROJECT: XXY (Optimized Edition v32.0)
-# OPTIMIZED BY: AI Assistant
-# UPDATE: 性能优化 / 自动资源清理 / 输入兼容性修复
+# STATUS: BUG FIXED (Installer & Path Fixes)
 # ==============================================================================
 
-# --- 0. 环境准备与清理机制 ---
-# 捕获退出信号，确保脚本结束时恢复终端状态（显示光标、开启回显）
+# --- 0. 环境自检与初始化 ---
+# 确保临时目录存在 (修复 "No such file" 报错)
+if [ ! -d "$PREFIX/tmp" ]; then mkdir -p "$PREFIX/tmp"; fi
+
+# 捕获退出信号，确保脚本结束时恢复终端状态
 cleanup() {
     tput cnorm
     stty echo
-    rm -f "$WORKER_SCRIPT" "$INJECT_SCRIPT"
+    rm -f "$WORKER_SCRIPT" "$INJECT_SCRIPT" 2>/dev/null
 }
 trap cleanup EXIT INT TERM
 
-# 检查依赖
-if ! command -v proot-distro &>/dev/null; then
-    echo "正在初始化环境..."
-    pkg update -y && pkg install proot-distro pulseaudio wget curl -y
+# 核心依赖检查 (增加 ncurses-utils 防止绘图报错)
+if ! command -v proot-distro &>/dev/null || ! command -v tput &>/dev/null; then
+    echo "正在初始化环境 (Installing dependencies)..."
+    pkg update -y && pkg install proot-distro pulseaudio wget curl ncurses-utils -y
 fi
 
-# 临时文件路径
-WORKER_SCRIPT=$(mktemp $PREFIX/tmp/xxy_worker.XXXXXX.sh)
-INJECT_SCRIPT=$(mktemp $PREFIX/tmp/xxy_inject.XXXXXX.sh)
+# 定义临时文件路径
+WORKER_SCRIPT="$PREFIX/tmp/xxy_worker_$$.sh"
+INJECT_SCRIPT="$PREFIX/tmp/xxy_inject_$$.sh"
 
 # --- 🎨 颜色定义 ---
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
@@ -32,8 +35,9 @@ W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 
 # --- 🔧 核心工具函数 ---
 
-# 生成一次 Worker 脚本，供后续调用
+# 生成 Worker 脚本 (修复 Write 权限问题)
 generate_worker() {
+    rm -f "$WORKER_SCRIPT"
     cat > "$WORKER_SCRIPT" << 'WORKER_EOF'
 #!/bin/sh
 task=$1
@@ -93,7 +97,6 @@ select_system() {
     for i in "${!SYS_LIST[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS_LIST[$i]}"; done
     echo -e "${W}0.${NC} 返回"
     
-    # 恢复回显以便输入
     stty echo; tput cnorm
     read -p "👉 序号: " idx
     stty -echo; tput civis
@@ -115,7 +118,7 @@ f_login() {
     # 注入美化配置
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$WORKER_SCRIPT" "install_fetch" >/dev/null 2>&1
     
-    cat > "$INJECT_SCRIPT" << 'EOF'
+    cat > "$INJECT_SCRIPT" << 'INJECT_EOF'
 RC=~/.bashrc
 sed -i '/fastfetch/d' $RC; sed -i '/neofetch/d' $RC
 if [ -f /tmp/fetch_status ]; then 
@@ -123,7 +126,7 @@ if [ -f /tmp/fetch_status ]; then
     [ "$FETCH_TOOL" != "none" ] && echo "$FETCH_TOOL" >> $RC
     rm -f /tmp/fetch_status
 fi
-EOF
+INJECT_EOF
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$INJECT_SCRIPT" >/dev/null 2>&1
     
     # 登录
@@ -155,6 +158,7 @@ f_install() {
         tput cnorm
         if proot-distro install $TARGET; then
             tput civis
+            generate_worker # 重新生成确保存在
             run_bg_safe "$TARGET" "update" "更新源"
             run_bg_safe "$TARGET" "install_cn" "设置中文"
             run_bg_safe "$TARGET" "install_fetch" "配置Fetch"
@@ -170,7 +174,6 @@ f_gui() {
     TARGET=$(select_system) || return
     
     echo "环境检查中..."
-    # 检查是否安装了 xfce4
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
         run_bg_safe "$TARGET" "install_gui" "安装 XFCE4 桌面"
     fi
@@ -181,12 +184,10 @@ f_gui() {
     stty -echo; tput civis
     
     if [ "$m" == "1" ]; then
-        # 清理 X11 环境
         pulseaudio --kill >/dev/null 2>&1
         pkill -f com.termux.x11 >/dev/null 2>&1
         rm -rf $PREFIX/tmp/.X11-unix
         
-        # 启动服务
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         termux-x11 :0 >/dev/null 2>&1 &
         
@@ -210,7 +211,6 @@ f_manage() {
     
     if [[ "$confirm" == "y" ]]; then
         proot-distro remove $TARGET
-        # 强制清理残留目录
         rm -rf "$PREFIX/var/lib/proot-distro/installed-rootfs/$TARGET"
         echo "已删除"; read -n 1 -s -r -p "..."
     fi
@@ -219,7 +219,6 @@ f_manage() {
 # --- UI 绘制核心 ---
 update_hud() {
     NOW=$(date "+%H:%M")
-    # 降低 free 命令频率，仅在特定帧数更新，减少 CPU
     if (( FRAME % 50 == 0 )); then
         MEM=$(free -m | awk 'NR==2{printf "%.1fG", $3/1024}')
     fi
@@ -244,9 +243,9 @@ draw_static() {
 }
 
 # --- 主程序初始化 ---
-generate_worker  # 预先生成 Worker 脚本
-tput civis       # 隐藏光标
-stty -echo       # 关闭回显
+generate_worker
+tput civis
+stty -echo
 draw_static
 
 USER_IN=""
@@ -259,18 +258,13 @@ while true; do
     ((FRAME++))
     C_IDX=$((FRAME % 6)); CUR_C=${COLORS[$C_IDX]}
     
-    # 绘制输入框
     tput cup 14 0; printf "${CUR_C}╭── 请输入序号 ──────────────────────────────────────────────╮${NC}"
     tput cup 15 0; printf "${CUR_C}│${NC} ${C}➤${NC} %-40s           ${CUR_C}│${NC}" "$USER_IN${W}█${NC}"
     tput cup 16 0; printf "${CUR_C}╰────────────────────────────────────────────────────────────╯${NC}"
 
-    # 读取输入 (超时时间设为 0.05s 兼顾响应与性能)
     read -t 0.05 -n 1 k
     if [[ $? -eq 0 ]]; then
         if [[ -z "$k" ]]; then
-            # 如果按下了回车 (k为空但在 read 成功时通常意味着换行)
-            # 注意：在 -n 1 模式下，回车通常会被当作空字符或者不触发非零退出
-            # 这里我们主要依靠逻辑判断 USER_IN 是否有内容
              if [[ -n "$USER_IN" ]]; then
                 case $USER_IN in
                     1) f_login ;;
@@ -279,21 +273,20 @@ while true; do
                     4) f_manage ;;
                     0) exit 0 ;;
                 esac
-                # 执行完功能后重绘界面
                 tput civis; stty -echo; draw_static; USER_IN=""
             fi
         elif [[ "$k" == $'\x7f' || "$k" == $'\b' ]]; then 
-            # 处理 Backspace (兼容 \x7f 和 \b)
             USER_IN="${USER_IN%?}"
         elif [[ "$k" == $'\e' ]]; then 
-            # 处理 ESC 序列防止乱码
             read -t 0.01 -n 2
         else 
-            # 追加字符
             USER_IN="$USER_IN$k"
         fi
     fi
 done
 EOF
+# 赋予执行权限
 chmod +x $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v32.0 (AI 优化版) 已安装。\n更流畅、更安全、更稳定！输入 xxy 启动。\033[0m"
+# 自动修复潜在的换行符问题
+sed -i 's/\r$//' $PREFIX/bin/xxy
+echo -e "\033[1;32m✅ XXY v32.0 (修复版) 已安装。\n已修复部分设备报错问题，输入 xxy 即可启动。\033[0m"
