@@ -1,18 +1,17 @@
-# 1. 强制清理旧环境 (防止残留干扰)
+# 1. 强制清理旧环境
 rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
 
-# 2. 写入新版脚本 (v34.0)
+# 2. 写入新版脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Ultimate Edition v34.0)
-# DATE: 2023-10-27
-# AUTHOR: Xiaoxinyun2008 & Optimized AI
+# PROJECT: XXY (Ultimate Edition v34.1)
+# FIX: 移除启动时自动更新，改为手动菜单触发
 # ==============================================================================
 
-# --- 0. 全局配置与版本控制 ---
-export VERSION="v34.0"
+# --- 0. 全局配置 ---
+export VERSION="v34.1"
 export UPDATE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
@@ -23,7 +22,7 @@ export TERMUX_PKG_OPTS="-y -o Dpkg::Options::=--force-confnew"
 # 颜色定义
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); P=$(tput setaf 5); C=$(tput setaf 6)
-W=$(tput setaf 7); NC=$(tput sgr0)
+W=$(tput setaf 7); GR=$(tput setaf 8); NC=$(tput sgr0)
 
 # 异常捕获
 cleanup() {
@@ -33,100 +32,70 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- 1. 核心检测模块 (小白逻辑增强) ---
+# --- 1. 核心检测模块 ---
 
-# 1.1 版本更新检测
-check_update() {
-    echo -ne "${B}Checking for updates...${NC}\r"
-    # 设置超时时间 3秒，防止无网络卡死
-    REMOTE_VER=$(curl -s --max-time 3 "$UPDATE_URL" | grep "export VERSION=" | cut -d'"' -f2)
-    
-    if [[ -n "$REMOTE_VER" ]] && [[ "$REMOTE_VER" != "$VERSION" ]]; then
-        echo -e "\n${Y}⚠️  发现新版本: $REMOTE_VER (当前: $VERSION)${NC}"
-        echo -e "正在自动升级..."
-        bash -c "$(curl -fsSL "$UPDATE_URL")"
-        exit 0
-    fi
-}
-
-# 1.2 依赖全量自检 (带可视化)
+# 1.1 依赖全量自检 (首次运行自动触发)
 check_dependencies() {
+    # 检查标记文件，避免每次启动都 check 一遍，提高启动速度
+    if [ -f "$PREFIX/etc/xxy_checked" ]; then return; fi
+
     clear
-    echo -e "${C}=== XXY 环境初始化 ===${NC}"
+    echo -e "${C}=== XXY 环境初始化 (首次运行) ===${NC}"
     
-    # 定义基础依赖 + GUI 依赖 + 美化依赖
     DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch"
-    # Termux:X11 需要特殊检查
     X11_DEPS="x11-repo termux-x11-nightly"
     
-    # 检查 fastfetch 是否安装 (Feature 2)
+    # 检查 fastfetch
     if ! command -v fastfetch &>/dev/null; then
-        echo -e "${Y}⚡ 正在安装 Fastfetch (美化组件)...${NC}"
+        echo -e "${Y}⚡ 正在安装美化组件...${NC}"
         pkg install fastfetch $TERMUX_PKG_OPTS >/dev/null 2>&1
     fi
 
-    # 检查基础依赖
     MISSING=""
     for dep in $DEPS; do
         if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi
     done
 
-    # 检查 X11
     if ! command -v termux-x11 &>/dev/null; then
-        echo -e "${Y}📦 正在初始化 X11 图形库仓库...${NC}"
+        echo -e "${Y}📦 正在初始化 X11 仓库...${NC}"
         pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1
         MISSING="$MISSING termux-x11-nightly"
     fi
 
     if [ -n "$MISSING" ]; then
-        echo -e "${P}🛠️  正在安装核心组件 (请保持网络)...${NC}"
-        echo -e "缺失: $MISSING"
-        # 使用静默但强制模式安装，确保小白不会被 dpkg 锁卡住
+        echo -e "${P}🛠️  正在安装核心组件...${NC}"
         pkg update -y >/dev/null 2>&1
         pkg install $MISSING $TERMUX_PKG_OPTS
-        
-        if [ $? -ne 0 ]; then
-            echo -e "\n${R}❌ 依赖安装失败！请检查网络连接后重试。${NC}"
-            echo "建议切换 Termux 软件源 (termux-change-repo)"
-            exit 1
-        fi
     fi
+    
+    # 标记已检查
+    touch "$PREFIX/etc/xxy_checked"
 }
 
 # --- 2. 容器工作逻辑 ---
 
-# 定义内部脚本路径
 WORKER_SCRIPT="$TMPDIR/xxy_worker_$$.sh"
 INJECT_SCRIPT="$TMPDIR/xxy_inject_$$.sh"
 
-# 生成容器内执行脚本
 create_worker_script() {
     rm -f "$WORKER_SCRIPT"
-    
     cat << 'EOF' > "$WORKER_SCRIPT"
 #!/bin/sh
 action=$1
-is_debian=false
-is_arch=false
-is_alpine=false
+is_debian=false; is_arch=false; is_alpine=false
 
-# 智能判断包管理器
 if command -v apt >/dev/null; then
-    INSTALL="apt install -y"; UPDATE="apt update -y"
-    is_debian=true
+    INSTALL="apt install -y"; UPDATE="apt update -y"; is_debian=true
 elif command -v pacman >/dev/null; then
-    INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"
-    is_arch=true
+    INSTALL="pacman -S --noconfirm"; UPDATE="pacman -Sy --noconfirm"; is_arch=true
 elif command -v apk >/dev/null; then
-    INSTALL="apk add"; UPDATE="apk update"
-    is_alpine=true
+    INSTALL="apk add"; UPDATE="apk update"; is_alpine=true
 else
     echo "Unknown OS"; exit 1
 fi
 
 case "$action" in
   change_source)
-    # 极简换源逻辑 (Feature 3: 小白优化)
     if [ "$is_debian" = true ]; then
         sed -i 's/http:\/\/.*archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
         sed -i 's/http:\/\/ports.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list 2>/dev/null
@@ -145,17 +114,13 @@ case "$action" in
     elif [ "$is_alpine" = true ]; then
         $INSTALL xfce4 dbus-x11 tigervnc
     fi
-    
-    # 强制修复 VNC 密码 (小白陷阱修复)
     mkdir -p ~/.vnc
     echo "123456" | vncpasswd -f > ~/.vnc/passwd
     chmod 600 ~/.vnc/passwd
     ;;
 
   install_fastfetch)
-    # 容器内安装 fastfetch (Feature 2)
     $INSTALL fastfetch || $INSTALL neofetch
-    # 标记安装了哪个
     if command -v fastfetch >/dev/null; then echo "fastfetch" > /tmp/fetch_bin
     elif command -v neofetch >/dev/null; then echo "neofetch" > /tmp/fetch_bin
     else echo "none" > /tmp/fetch_bin; fi
@@ -173,241 +138,164 @@ EOF
     chmod 755 "$WORKER_SCRIPT"
 }
 
-# 获取系统列表 (修复 Bug 1: 去除颜色代码)
 get_systems() {
-    # 使用 sed 去除 ANSI 颜色代码，确保 grep 匹配纯文本
-    proot-distro list | sed 's/\x1b\[[0-9;]*m//g' | awk '
-        /^Installed distributions:/ {flag=1; next}
-        /^Supported distributions:/ {flag=0}
-        flag && /\*/ {print $2}
-    '
+    proot-distro list | sed 's/\x1b\[[0-9;]*m//g' | awk '/^Installed distributions:/{flag=1; next} /^Supported distributions:/{flag=0} flag && /\*/ {print $2}'
 }
 
-# 后台任务执行器
 run_task() {
-    local sys=$1
-    local cmd=$2
-    local desc=$3
-    # 路径映射修复
+    local sys=$1; local cmd=$2; local desc=$3
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
-    
     tput cup 18 0
     echo -ne "${Y}⚙️  [$sys] $desc...${NC}"
-    
     proot-distro login "$sys" --shared-tmp -- /bin/sh "$inner_script" "$cmd" >/dev/null 2>&1
-    
     tput cup 18 0
-    if [ $? -eq 0 ]; then
-        echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"
-    else
-        echo -ne "${R}❌ [$sys] $desc 失败 (检查网络) ${NC}"
-    fi
+    if [ $? -eq 0 ]; then echo -ne "${G}✅ [$sys] $desc 完成          ${NC}"; else echo -ne "${R}❌ [$sys] $desc 失败          ${NC}"; fi
 }
 
-# 系统选择菜单
 select_menu() {
     mapfile -t SYS_ARRAY < <(get_systems)
-    
     if [ ${#SYS_ARRAY[@]} -eq 0 ]; then
-        echo -e "\n${R}⚠️  未检测到已安装的系统！${NC}"
-        echo "请先执行 [2] 安装系统"
+        echo -e "\n${R}⚠️  未检测到系统！${NC} 请先 [2] 安装系统"
         read -n 1 -s -r -p "按任意键返回..."
         return 1
     fi
-
-    for i in "${!SYS_ARRAY[@]}"; do
-        echo -e "${G}$((i+1)).${NC} ${SYS_ARRAY[$i]}"
-    done
+    for i in "${!SYS_ARRAY[@]}"; do echo -e "${G}$((i+1)).${NC} ${SYS_ARRAY[$i]}"; done
     echo -e "${W}0.${NC} 返回"
-    
-    tput cnorm; stty echo
-    read -p "👉 选择系统序号: " choice
-    stty -echo; tput civis
-    
+    tput cnorm; stty echo; read -p "👉 序号: " choice; stty -echo; tput civis
     if [ "$choice" == "0" ] || [ -z "$choice" ]; then return 1; fi
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#SYS_ARRAY[@]}" ]; then
-        local selected="${SYS_ARRAY[$((choice-1))]}"
-        # 二次验证，防止空值
-        if [ -z "$selected" ]; then return 1; fi
-        echo "$selected"
+        echo "${SYS_ARRAY[$((choice-1))]}"
         return 0
-    else
-        echo "输入无效"; return 1
     fi
+    return 1
 }
 
-# --- 3. 功能实现 ---
+# --- 3. 功能模块 ---
 
-# [F1] 登录系统 (自动注入 fastfetch)
 do_login() {
     clear; echo -e "${C}=== 登录系统 ===${NC}"
     TARGET=$(select_menu) || return
-    
     create_worker_script
     local inner_script="/tmp/$(basename "$WORKER_SCRIPT")"
     local inner_inject="/tmp/$(basename "$INJECT_SCRIPT")"
     
-    echo -e "${B}正在配置启动环境...${NC}"
-    # 1. 尝试安装 fastfetch
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_script" "install_fastfetch" >/dev/null 2>&1
-    
-    # 2. 注入 .bashrc
     cat > "$INJECT_SCRIPT" << 'EOF'
 RC=~/.bashrc
 [ -f /etc/profile.d/xxy_lang.sh ] && . /etc/profile.d/xxy_lang.sh
 if [ -f /tmp/fetch_bin ]; then
     TOOL=$(cat /tmp/fetch_bin)
     rm -f /tmp/fetch_bin
-    # 防止重复注入
     if [ "$TOOL" != "none" ] && ! grep -q "$TOOL" "$RC" 2>/dev/null; then
-        echo "" >> "$RC"
-        echo "clear" >> "$RC" # 登录清屏
-        echo "$TOOL" >> "$RC" # 显示信息
+        echo "" >> "$RC"; echo "clear" >> "$RC"; echo "$TOOL" >> "$RC"
     fi
 fi
 EOF
     proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$inner_inject" >/dev/null 2>&1
-    
-    cleanup
-    echo -e "${G}正在进入 $TARGET...${NC}"
-    proot-distro login "$TARGET"
-    
-    tput civis; stty -echo; draw_ui
+    cleanup; echo -e "${G}进入 $TARGET...${NC}"; proot-distro login "$TARGET"; tput civis; stty -echo; draw_ui
 }
 
-# [F2] 安装系统 (小白自动优化)
 do_install() {
-    clear; echo -e "${C}=== 安装系统 (小白推荐版) ===${NC}"
-    # 只给小白看最稳的
+    clear; echo -e "${C}=== 安装系统 (自动优化) ===${NC}"
     DISTROS=("ubuntu" "debian" "archlinux" "alpine")
     for i in "${!DISTROS[@]}"; do echo -e "${W}$((i+1)).${NC} ${DISTROS[$i]}"; done
     echo -e "${W}0.${NC} 返回"
-    
-    tput cnorm; stty echo
-    read -p "👉 选择发行版: " idx
-    stty -echo; tput civis
-    
+    tput cnorm; stty echo; read -p "👉 选择: " idx; stty -echo; tput civis
     if [ "$idx" == "0" ]; then return; fi
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
-        
-        echo -e "\n${Y}🚀 正在下载 $TARGET 镜像...${NC}"
-        echo -e "${GR}(如果长时间不动，请检查网络)${NC}"
-        tput cnorm
-        
+        echo -e "\n${Y}正在下载 $TARGET...${NC}"; tput cnorm
         if proot-distro install $TARGET; then
             tput civis
             create_worker_script
-            # 自动化流程
-            run_task "$TARGET" "change_source" "自动更换国内源 (加速)"
-            run_task "$TARGET" "install_cn" "配置中文环境"
-            run_task "$TARGET" "install_fastfetch" "预装系统信息工具"
-            
-            echo -e "\n${G}🎉 安装成功！系统已优化完毕。${NC}"
-            read -n 1 -s -r -p "按任意键继续..."
+            run_task "$TARGET" "change_source" "更换国内源"
+            run_task "$TARGET" "install_cn" "中文环境"
+            run_task "$TARGET" "install_fastfetch" "安装工具"
+            echo -e "\n${G}🎉 安装完成！${NC}"; read -n 1 -s -r -p "..."
         else
-            echo -e "\n${R}💥 安装失败。可能是网络问题。${NC}"
-            read -n 1 -s -r -p "按任意键继续..."
+            echo -e "\n${R}❌ 失败。请检查网络。${NC}"; read -n 1 -s -r -p "..."
         fi
     fi
 }
 
-# [F3] 启动 GUI (修复 Bug 3)
 do_gui() {
-    clear; echo -e "${C}=== 启动桌面环境 ===${NC}"
+    clear; echo -e "${C}=== 启动桌面 ===${NC}"
     TARGET=$(select_menu) || return
-    
     create_worker_script
-    
-    # 检测桌面环境是否安装
-    echo -ne "🔍 正在检查桌面组件...\r"
+    echo -ne "🔍 检查组件...\r"
     if ! proot-distro login "$TARGET" -- bash -c "command -v startxfce4" >/dev/null 2>&1; then
-        echo ""
-        echo -e "${Y}⚠️  未检测到桌面，正在自动安装...${NC}"
-        run_task "$TARGET" "install_gui" "安装 XFCE4 桌面 (耗时较长)"
+        run_task "$TARGET" "install_gui" "安装 XFCE4 (耗时较长)"
     fi
-
-    echo -e "\n${G}请选择显示模式:${NC}"
-    echo -e "1. Termux:X11 ${Y}(推荐/流畅/需APP)${NC}"
-    echo -e "2. VNC Viewer (通用/兼容性好)"
+    echo -e "\n${G}选择模式:${NC}"
+    echo -e "1. Termux:X11 ${Y}(推荐)${NC}"
+    echo -e "2. VNC Viewer"
     echo -e "0. 返回"
-    
-    tput cnorm; stty echo
-    read -p "模式: " m
-    stty -echo; tput civis
-    
+    tput cnorm; stty echo; read -p "模式: " m; stty -echo; tput civis
     if [ "$m" == "1" ]; then
-        # X11 强力清理
-        pulseaudio --kill >/dev/null 2>&1
-        pkill -f com.termux.x11 >/dev/null 2>&1
-        rm -rf "$TMPDIR/.X11-unix" # 关键修复
-        
-        # 启动 PulseAudio
+        pulseaudio --kill >/dev/null 2>&1; pkill -f com.termux.x11 >/dev/null 2>&1; rm -rf "$TMPDIR/.X11-unix"
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
-        
-        # 唤醒 APP
-        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-        sleep 1
+        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1; sleep 1
         termux-x11 :0 >/dev/null 2>&1 &
-        
-        # 启动命令
-        CMD="export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
-        echo -e "${G}🚀 正在启动 X11... 请切换到 Termux:X11 APP${NC}"
-        proot-distro login "$TARGET" --shared-tmp -- bash -c "$CMD"
-        
+        proot-distro login "$TARGET" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
     elif [ "$m" == "2" ]; then
-        # VNC 启动
-        echo -e "${Y}🚀 正在启动 VNC Server...${NC}"
-        # 修复：清理锁文件 + 指定分辨率
-        CMD="vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
-        proot-distro login "$TARGET" -- bash -c "$CMD"
-        
-        echo -e "\n${G}=== VNC 就绪 ===${NC}"
-        echo -e "地址: ${W}127.0.0.1:5901${NC}"
-        echo -e "密码: ${W}123456${NC} (已自动设置)"
-        read -n 1 -s -r -p "按任意键返回..."
+        proot-distro login "$TARGET" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
+        echo -e "\n${G}VNC 启动成功${NC}\n地址: 127.0.0.1:5901\n密码: 123456"; read -n 1 -s -r -p "..."
     fi
 }
 
-# --- 4. UI 绘制 (修复 Bug 2: ASCII 排版) ---
+# [F5] 更新功能 (手动触发)
+do_update() {
+    clear; echo -e "${C}=== 检查更新 ===${NC}"
+    echo -ne "${B}正在连接服务器...${NC}\r"
+    REMOTE_VER=$(curl -s --max-time 3 "$UPDATE_URL" | grep "export VERSION=" | cut -d'"' -f2)
+    
+    if [[ -z "$REMOTE_VER" ]]; then
+        echo -e "\n${R}❌ 获取版本失败，请检查网络。${NC}"
+    elif [[ "$REMOTE_VER" != "$VERSION" ]]; then
+        echo -e "\n${Y}🚀 发现新版本: $REMOTE_VER${NC}"
+        echo -e "${W}当前版本: $VERSION${NC}"
+        tput cnorm; stty echo
+        read -p "是否立即更新? (y/n): " confirm
+        stty -echo; tput civis
+        if [[ "$confirm" == "y" ]]; then
+            echo -e "${G}正在更新...${NC}"
+            bash -c "$(curl -fsSL "$UPDATE_URL")"
+            exit 0
+        fi
+    else
+        echo -e "\n${G}✅ 当前已是最新版本 ($VERSION)${NC}"
+    fi
+    read -n 1 -s -r -p "按任意键返回..."
+}
+
+# --- UI 绘制 ---
 
 draw_ui() {
     clear
-    # 使用 cat 输出纯文本，防止 printf 错位
     cat << EOF
 ${C}
 ██╗  ██╗██╗  ██╗██╗   ██╗ ${W}XXY Termux${C}
 ╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝ ${GR}${VERSION}${C}
- ╚███╔╝  ╚███╔╝  ╚████╔╝  ${W}Ultimate Edition${C}
+ ╚███╔╝  ╚███╔╝  ╚████╔╝  ${W}Ultimate${C}
  ██╔██╗  ██╔██╗   ╚██╔╝   ${NC}
 ${GR}──────────────────────────────────────────${NC}
 ${GR}│${NC} ${W}1.${NC} 登录系统 (Login)    ${GR}│${NC} ${W}3.${NC} 启动桌面 (GUI)
-${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}0.${NC} 退出程序 (Exit)
+${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}5.${NC} 检查更新 (Update)
 ${GR}──────────────────────────────────────────${NC}
 EOF
-    
-    # 显示宿主机的 fastfetch 概要 (Feature 2: 可选，若已安装)
     if command -v fastfetch >/dev/null; then
         fastfetch --config structure:OS:Memory --logo none 2>/dev/null | sed 's/^/  /'
     fi
 }
 
-# --- 主程序循环 ---
-
-# 初始化
-check_update       # F1: 更新检测
-check_dependencies # 基础环境检查
+# --- 主循环 ---
+check_dependencies
 create_worker_script
-tput civis
-stty -echo
-draw_ui
-
-INPUT_BUF=""
+tput civis; stty -echo
+draw_ui; INPUT_BUF=""
 
 while true; do
-    tput cup 12 0
-    echo -ne "${C}➤ 请输入序号: ${W}${INPUT_BUF}_        ${NC}"
-
+    tput cup 12 0; echo -ne "${C}➤ 请输入序号: ${W}${INPUT_BUF}_        ${NC}"
     read -t 0.05 -n 1 key
     if [[ $? -eq 0 ]]; then
         if [[ -z "$key" ]]; then
@@ -416,6 +304,7 @@ while true; do
                     1) do_login ;;
                     2) do_install ;;
                     3) do_gui ;;
+                    5) do_update ;;
                     0) exit 0 ;;
                 esac
                 tput civis; stty -echo; draw_ui; INPUT_BUF=""
@@ -431,10 +320,7 @@ while true; do
 done
 INSTALL_EOF
 
-# 3. 权限修复与启动引导
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-
-echo -e "\033[1;32m✅ XXY v34.0 安装完成！\n依赖已自动修复，请输入 xxy 启动。\033[0m"
-# 自动进入 xxy
+echo -e "\033[1;32m✅ XXY v34.1 更新完成！\n修复了无限升级循环问题。\n输入 xxy 启动。\033[0m"
 exec xxy
