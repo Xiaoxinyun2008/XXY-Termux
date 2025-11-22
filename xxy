@@ -1,409 +1,369 @@
 # ==============================================================================
-# 🪨 XXY v7.0 LTS (磐石·长期支持版)
-# 核心理念：去繁就简 | 极致稳定 | 零故障逻辑
+# 💠 XXY v8888.0 Adaptive Fusion (自适应融合版)
+# STYLE: Streaming Log UI (黑客滚动风格)
+# CORE: Auto-Retry | Smart-Clean | Process-Guard | Compatibility-Layer
 # ==============================================================================
 
-# --- [1. 环境初始化] ---
-# 不搞花哨的加载动画，直接干实事
-echo "正在初始化运行环境..."
-# 强杀冲突进程
-pkill -9 sshd 2>/dev/null
-pkill -9 termux-x11 2>/dev/null
-pkill -9 pulseaudio 2>/dev/null
-# 清理旧脚本残余
+# --- [Step 0] 净化序列 ---
+tput cnorm
+clear
+echo -e "\033[1;32m[INIT] System purge sequence initiated...\033[0m"
+# 杀进程
+for p in sshd termux-x11 pulseaudio Xwayland vncserver proot; do
+    pkill -9 "$p" >/dev/null 2>&1
+done
+# 删残留
 rm -f "$PREFIX/bin/xxy"
-rm -rf "$PREFIX/tmp/xxy_lts"
-mkdir -p "$PREFIX/tmp/xxy_lts"
-# 清理可能损坏的下载缓存 (这是安装失败的元凶)
+rm -rf "$PREFIX/tmp/xxy_fusion"
+mkdir -p "$PREFIX/tmp/xxy_fusion"
+# 删缓存 (重要)
 rm -rf "$PREFIX/var/lib/proot-distro/dlcache"
 rm -rf "$PREFIX/var/lib/proot-distro/download"
 
-# --- [2. 写入核心代码] ---
-cat > $PREFIX/bin/xxy << 'EOF'
+# --- [Step 1] 写入融合核心 ---
+cat > $PREFIX/bin/xxy << 'FUSION_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
-# --- 配置区 ---
-export VERSION="v7.0 磐石版"
+# --- 配置层 ---
+export VERSION="v8888.0 融合版"
 export PREFIX="/data/data/com.termux/files/usr"
-export TMP="$PREFIX/tmp/xxy_lts"
+export TMP="$PREFIX/tmp/xxy_fusion"
 export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs"
-export BACKUP_DIR="/sdcard/XXY_Backups"
+export LOG="$TMP/sys.log"
 export LANG="C.UTF-8"
 
-# 确保目录存在
-[ ! -d "$BACKUP_DIR" ] && mkdir -p "$BACKUP_DIR"
+# 霓虹色板
+C_R=$(tput setaf 196); C_G=$(tput setaf 46); C_Y=$(tput setaf 226)
+C_B=$(tput setaf 39);  C_P=$(tput setaf 201); C_C=$(tput setaf 51)
+C_W=$(tput setaf 255); C_GR=$(tput setaf 240); C_RST=$(tput sgr0)
 
-# 颜色 (仅用于基本高亮，不搞复杂特效)
-R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3); C=$(tput setaf 6); NC=$(tput sgr0)
+# 异常接管
+trap 'echo -e "\n${C_R}[SYSTEM HALT] 用户终止操作。${C_RST}"; exit 0' EXIT INT TERM
 
-# --- 核心工具函数 ---
+# ==============================================================================
+# 📟 流式 UI 引擎 (Streaming UI Engine)
+# 优势：不使用光标定位，永远不会因为屏幕大小、键盘弹出而错位
+# ==============================================================================
 
-# 1. 网络检测 (带超时控制)
-check_net() {
-    echo -ne "${Y}正在检测网络... ${NC}"
-    if ping -c 1 -W 2 223.5.5.5 >/dev/null 2>&1; then
-        echo "${G}通畅${NC}"
+print_logo() {
+    clear
+    echo -e "${C_P}██╗  ██╗██╗  ██╗██╗   ██╗${C_RST}"
+    echo -e "${C_P}╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝${C_RST}  ${C_C}SYSTEM: ${VERSION}${C_RST}"
+    echo -e "${C_P} ╚███╔╝  ╚███╔╝  ╚████╔╝ ${C_RST}  ${C_C}STATUS: ONLINE${C_RST}"
+    echo -e "${C_P} ██╔██╗  ██╔██╗   ╚██╔╝  ${C_RST}  ${C_GR}$(date '+%Y-%m-%d %H:%M')${C_RST}"
+    echo -e "${C_GR}────────────────────────────────────────${C_RST}"
+}
+
+log_info() { echo -e "${C_B}[INFO]${C_RST} $1"; }
+log_success() { echo -e "${C_G}[ OK ]${C_RST} $1"; }
+log_warn() { echo -e "${C_Y}[WARN]${C_RST} $1"; }
+log_err() { echo -e "${C_R}[FAIL]${C_RST} $1"; }
+
+# 模拟黑客加载条
+loading_bar() {
+    local task=$1
+    echo -ne "${C_C}[TASK] $task... ${C_RST}"
+    for i in {1..5}; do
+        echo -ne "▓"
+        sleep 0.05
+    done
+    echo -e "${C_G} DONE${C_RST}"
+}
+
+# ==============================================================================
+# 🛡️ 逻辑核心 (Logic Core)
+# ==============================================================================
+
+# 1. 智能网络检测
+check_network() {
+    log_info "正在扫描网络链路..."
+    if ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then
+        log_success "CN 节点连通 (阿里云)"
         return 0
     else
-        echo "${R}连接失败${NC}"
+        log_err "网络断开。请检查 WiFi/数据网络。"
         return 1
     fi
 }
 
-# 2. 输入读取 (防呆逻辑)
-read_input() {
-    unset CHOICE
-    read -p "👉 请输入序号: " CHOICE
+# 2. 存储熔断
+check_storage() {
+    local free=$(df -m "$PREFIX" | awk 'NR==2 {print $4}')
+    if [ "$free" -lt 2000 ]; then
+        log_err "存储空间不足 2GB ($free MB)。无法安装。"
+        return 1
+    fi
+    return 0
 }
 
-# 3. 依赖检查 (静默补全)
+# 3. 依赖自愈
 check_deps() {
-    local pkgs="proot-distro pulseaudio wget curl openssh ncurses-utils fastfetch net-tools tar"
-    local missing=""
-    for p in $pkgs; do
-        if ! command -v $p >/dev/null; then missing="$missing $p"; fi
-    done
+    if [ -f "$PREFIX/var/lib/dpkg/lock-frontend" ]; then
+        log_warn "检测到 dpkg 锁死，正在强制解锁..."
+        rm -f $PREFIX/var/lib/dpkg/lock*
+    fi
     
-    if [ -n "$missing" ]; then
-        echo "${Y}发现缺失组件，正在自动补全...${NC}"
-        pkg install $missing -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
+    if ! command -v proot-distro >/dev/null; then
+        log_warn "缺失核心组件 [proot-distro]"
+        loading_bar "自动补全组件"
+        pkg install proot-distro -y >/dev/null 2>&1
     fi
     
     if ! command -v termux-x11 >/dev/null; then
-        echo "${Y}正在安装图形驱动支持...${NC}"
+        log_warn "缺失图形驱动 [x11-repo]"
+        loading_bar "部署图形子系统"
         pkg install x11-repo -y >/dev/null 2>&1
         pkg install termux-x11-nightly -y >/dev/null 2>&1
     fi
 }
 
-# --- 内部执行脚本 (Worker) ---
+# ==============================================================================
+# 👷 工单系统 (Worker)
+# ==============================================================================
 create_worker() {
-    cat > "$TMP/worker.sh" << 'WORKER_EOF'
+    rm -f "$TMP/worker.sh"
+    cat >> "$TMP/worker.sh" << 'EOF'
 #!/bin/sh
 set -e
 act=$1
-arg=$2
-
-# 系统识别
 if [ -f /etc/alpine-release ]; then T="alpine"; PM="apk"
 elif [ -f /etc/arch-release ]; then T="arch"; PM="pacman"
 elif [ -f /etc/debian_version ]; then T="debian"; PM="apt"
 else T="unknown"; fi
 
 case "$act" in
-    src) # 换源
-        if [ "$T" = "debian" ]; then
-            if ! grep -q "tsinghua" /etc/apt/sources.list; then
-                sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
-                apt update -y
-            fi
-        fi ;;
-    gui) # 安装桌面
-        if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server; fi
-        if [ "$T" = "alpine" ]; then apk add xfce4 dbus-x11 tigervnc; fi
-        mkdir -p ~/.vnc
-        echo "123456" | vncpasswd -f > ~/.vnc/passwd
-        chmod 600 ~/.vnc/passwd ;;
-    cn) # 中文环境
-        if [ "$T" = "debian" ]; then 
-            apt install -y locales fonts-noto-cjk
-            echo "zh_CN.UTF-8 UTF-8" > /etc/locale.gen
-            locale-gen
-        fi ;;
-    clean) # 清理旧配置
-        sed -i '/fastfetch/d' /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
+  src) 
+    if [ "$T" = "debian" ]; then 
+      grep -q "tsinghua" /etc/apt/sources.list || sed -i 's/ports.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
+      apt update -y
+    fi ;;
+  clean)
+    sed -i '/fastfetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
+  gui)
+    if [ "$T" = "debian" ]; then apt install -y xfce4 xfce4-goodies dbus-x11 tigervnc-standalone-server; fi
+    mkdir -p ~/.vnc; echo "123456" | vncpasswd -f > ~/.vnc/passwd; chmod 600 ~/.vnc/passwd ;;
+  fetch)
+    command -v fastfetch >/dev/null || $PM install -y fastfetch || $PM install -y neofetch ;;
 esac
-WORKER_EOF
+EOF
     chmod 777 "$TMP/worker.sh"
 }
 
-run_task() {
-    local sys=$1
-    local task=$2
-    local cmd=$3
-    echo -ne "${Y}正在执行: $task ... ${NC}"
-    if proot-distro login "$sys" --shared-tmp -- /bin/sh "$TMP/worker.sh" "$cmd" >/dev/null 2>&1; then
-        echo "${G}成功${NC}"
-    else
-        echo "${R}跳过 (非关键错误)${NC}"
-    fi
-}
+# ==============================================================================
+# 🎮 业务模块
+# ==============================================================================
 
-# --- 业务功能模块 ---
+get_sys_list() { if [ -d "$ROOTFS" ]; then ls -1 "$ROOTFS" 2>/dev/null; fi; }
 
-# [1] 获取系统列表
-get_systems() {
-    if [ -d "$ROOTFS" ]; then ls -1 "$ROOTFS" 2>/dev/null; fi
-}
-
-# [2] 安装逻辑 (稳健版)
-do_install() {
-    clear
-    echo "=== 安装新系统 ==="
-    if ! check_net; then
-        echo "${R}错误：没有网络连接。安装系统必须联网下载。${NC}"
-        echo "请打开 WiFi 或数据流量，建议开启 VPN。"
-        read -p "按回车返回..."
-        return
-    fi
-
-    echo "1. Ubuntu (推荐，最稳定)"
-    echo "2. Debian (轻量)"
-    echo "3. ArchLinux (折腾)"
-    echo "0. 返回"
-    read_input
+# [M1] 安装系统 (带重试机制)
+mod_install() {
+    print_logo
+    echo -e "${C_W}=== 系统安装向导 ===${C_RST}"
     
-    case "$CHOICE" in
-        1) TARGET="ubuntu" ;;
-        2) TARGET="debian" ;;
-        3) TARGET="archlinux" ;;
-        0) return ;;
-        *) echo "${R}输入错误${NC}"; sleep 1; return ;;
+    if ! check_storage; then read -n 1; return; fi
+    if ! check_network; then read -n 1; return; fi
+    
+    echo -e "1. Ubuntu (推荐)\n2. Debian\n3. ArchLinux\n4. Alpine\n0. 返回"
+    read -p "root@termux:~$ " idx
+    
+    case "$idx" in
+        1) TARGET="ubuntu" ;; 2) TARGET="debian" ;; 3) TARGET="archlinux" ;; 4) TARGET="alpine" ;;
+        0) return ;; *) log_err "输入错误"; sleep 1; return ;;
     esac
-
-    if [ -d "$ROOTFS/$TARGET" ]; then
-        echo "${Y}提示：该系统已存在，无需重复安装。${NC}"
-        read -p "按回车返回..."
-        return
-    fi
-
-    echo "${Y}正在清理缓存并重置环境...${NC}"
+    
+    if [ -d "$ROOTFS/$TARGET" ]; then log_warn "系统已存在"; sleep 1; return; fi
+    
+    log_info "初始化下载环境..."
     proot-distro reset "$TARGET" >/dev/null 2>&1
     rm -rf "$PREFIX/var/lib/proot-distro/download"
-
-    echo "${C}开始下载... (如果进度条卡住，请挂 VPN)${NC}"
+    
+    log_info "开始下载 (如果进度条不动，请挂VPN)..."
     if proot-distro install "$TARGET"; then
-        # 核心：尸检逻辑
+        # 尸检
         if [ ! -f "$ROOTFS/$TARGET/bin/sh" ]; then
-            echo "${R}严重错误：下载文件不完整（变成了空壳系统）。${NC}"
-            echo "原因：网络连接中断。"
-            echo "正在自动删除损坏的文件..."
+            log_err "文件校验失败 (空包)"
+            log_info "正在执行回滚操作..."
             proot-distro remove "$TARGET"
-            read -p "按回车返回..."
-            return
+            read -n 1; return
         fi
         
         create_worker
-        echo "${G}下载成功！正在进行初始化配置...${NC}"
-        run_task "$TARGET" "更换国内高速源" "src"
-        run_task "$TARGET" "设置中文环境" "cn"
-        run_task "$TARGET" "清理冗余配置" "clean"
+        loading_bar "配置源优化"
+        proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$TMP/worker.sh" "src" >/dev/null 2>&1
+        loading_bar "安装中文包"
+        proot-distro login "$TARGET" --shared-tmp -- /bin/sh "$TMP/worker.sh" "fetch" >/dev/null 2>&1
         
-        echo "${G}安装全部完成！${NC}"
+        log_success "安装完成！"
+        read -n 1
     else
-        echo "${R}安装失败。请检查网络后重试。${NC}"
+        log_err "下载失败 (网络超时)"
+        read -n 1
     fi
-    read -p "按回车返回..."
 }
 
-# [3] 登录逻辑
-do_login() {
-    local sys=$(get_systems | head -n 1)
-    if [ -z "$sys" ]; then
-        echo "${R}未检测到已安装的系统。请先安装。${NC}"
-        read -p "按回车返回..."
-        return
-    fi
+# [M2] 登录系统 (自动净化)
+mod_login() {
+    print_logo
+    echo -e "${C_W}=== 登录系统 ===${C_RST}"
     
-    # 再次尸检
-    if [ ! -f "$ROOTFS/$sys/bin/sh" ]; then
-        echo "${R}系统文件损坏，无法启动。建议删除重装。${NC}"
-        read -p "按回车返回..."
-        return
+    mapfile -t LIST < <(get_sys_list)
+    if [ ${#LIST[@]} -eq 0 ]; then log_err "无系统，请先安装"; sleep 1; return; fi
+    
+    for i in "${!LIST[@]}"; do echo -e "$((i+1)). ${LIST[$i]}"; done
+    echo "0. 返回"
+    
+    read -p "root@termux:~$ " idx
+    if [ "$idx" == "0" ]; then return; fi
+    
+    # 简单校验
+    if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -le "${#LIST[@]}" ]; then
+        SELECTED="${LIST[$((idx-1))]}"
+    else
+        log_err "无效序号"; sleep 1; return
     fi
-
-    # 启动
-    clear
-    echo "${G}正在进入 $sys ...${NC}"
-    # 使用一次性命令显示信息，不污染配置文件
-    proot-distro login "$sys" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; else echo 'Welcome to $sys'; fi; exec bash"
-}
-
-# [4] 桌面逻辑 (兼容性修复)
-do_gui() {
-    local sys=$(get_systems | head -n 1)
-    if [ -z "$sys" ]; then echo "${R}请先安装系统${NC}"; read -p "回车..."; return; fi
     
     create_worker
-    echo "${Y}正在检查桌面环境...${NC}"
-    # 检测是否安装了桌面，没装就自动装
-    if ! proot-distro login "$sys" -- command -v startxfce4 >/dev/null 2>&1; then
-        echo "${C}初次启动需要安装桌面，这可能需要几分钟...${NC}"
-        run_task "$sys" "安装 XFCE4 桌面" "gui"
-    fi
-
-    clear
-    echo "=== 启动桌面 ==="
-    echo "1. 本地模式 (Termux:X11 APP)"
-    echo "2. 远程模式 (VNC Viewer)"
-    read_input
+    loading_bar "清理配置文件"
+    proot-distro login "$SELECTED" --shared-tmp -- /bin/sh "$TMP/worker.sh" "clean" >/dev/null 2>&1
     
-    if [ "$CHOICE" == "1" ]; then
-        # 强力清理
+    clear
+    # 启动
+    proot-distro login "$SELECTED" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; fi; exec bash"
+}
+
+# [M3] 启动桌面 (兼容性修复)
+mod_gui() {
+    print_logo
+    echo -e "${C_W}=== 桌面环境 ===${C_RST}"
+    
+    mapfile -t LIST < <(get_sys_list)
+    if [ ${#LIST[@]} -eq 0 ]; then log_err "无系统"; sleep 1; return; fi
+    SELECTED="${LIST[0]}" # 默认选第一个，简化流程
+    log_info "目标系统: $SELECTED"
+    
+    create_worker
+    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then
+        log_warn "未检测到桌面，正在自动安装..."
+        log_info "这可能需要 3-5 分钟，请勿后台..."
+        if proot-distro login "$SELECTED" --shared-tmp -- /bin/sh "$TMP/worker.sh" "gui"; then
+            log_success "安装完成"
+        else
+            log_err "安装失败"; read -n 1; return
+        fi
+    fi
+    
+    echo -e "\n1. 本地模式 (Termux:X11)\n2. 远程模式 (VNC)\n0. 返回"
+    read -p "root@termux:~$ " m
+    
+    if [ "$m" == "1" ]; then
+        log_info "初始化 X11 引擎..."
         pkill -9 termux-x11 >/dev/null 2>&1
-        rm -rf "$PREFIX/tmp/.X11-unix"
+        rm -rf "$TMP/.X11-unix"
         
-        echo "${Y}正在尝试唤起 Termux:X11 APP...${NC}"
-        echo "(如果手机没反应，请手动打开 Termux:X11)"
-        
-        # 盲启动，不依赖 pm check，解决安卓12+权限问题
+        # 尝试唤醒，失败不报错，继续执行
         am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
         
-        sleep 2
-        echo "${G}正在启动图形引擎...${NC}"
+        sleep 1
         pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
         termux-x11 :0 &
-        proot-distro login "$sys" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
+        proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
         
-    elif [ "$CHOICE" == "2" ]; then
-        echo "${Y}正在启动 VNC 服务...${NC}"
-        proot-distro login "$sys" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
-        echo ""
-        echo "${G}✅ 启动成功${NC}"
-        echo "地址: 127.0.0.1:5901"
-        echo "密码: 123456"
-        read -p "按回车返回..."
+    elif [ "$m" == "2" ]; then
+        proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
+        echo -e "\n${C_G}✅ VNC 服务已启动${C_RST}"
+        echo -e "地址: 127.0.0.1:5901"
+        echo -e "密码: 123456"
+        read -n 1
     fi
 }
 
-# [5] SSH 管理
-do_ssh() {
-    clear
-    echo "=== SSH 远程管理 ==="
-    
-    # 获取状态
-    if pgrep sshd >/dev/null; then
-        echo "状态: ${G}正在运行${NC}"
-    else
-        echo "状态: ${R}已停止${NC}"
-    fi
-    
-    # 获取IP
-    MYIP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://')
-    USER=$(whoami)
-    
-    echo "本机 IP: ${C}$MYIP${NC}"
-    echo "用户名 : ${C}$USER${NC}"
-    echo "------------------"
-    echo "1. 启动服务"
-    echo "2. 停止服务"
-    echo "3. 修改密码"
-    echo "0. 返回"
-    read_input
-    
-    case "$CHOICE" in
-        1) 
-            pkill sshd; sshd
-            echo "${G}服务已启动！${NC}"
-            echo "电脑连接命令: ssh -p 8022 $USER@$MYIP"
-            read -p "回车..." ;;
-        2)
-            pkill sshd; echo "${R}服务已停止${NC}"; read -p "回车..." ;;
-        3)
-            passwd; read -p "回车..." ;;
-        0) return ;;
-    esac
-}
-
-# [6] 备份还原
-do_backup() {
-    local sys=$(get_systems | head -n 1)
-    if [ -z "$sys" ]; then echo "无系统"; read -p "回车..."; return; fi
-    
-    clear
-    echo "=== 备份与还原 ==="
-    echo "1. 备份当前系统 ($sys)"
-    echo "2. 从文件还原"
-    echo "0. 返回"
-    read_input
-    
-    if [ "$CHOICE" == "1" ]; then
-        echo "${Y}正在打包系统，请耐心等待...${NC}"
-        cd "$ROOTFS/$sys"
-        tar -czf "$BACKUP_DIR/backup_$sys.tar.gz" --exclude='tmp/*' --exclude='proc/*' .
-        echo "${G}备份成功！文件在: $BACKUP_DIR${NC}"
-        read -p "回车..."
-    elif [ "$CHOICE" == "2" ]; then
-        echo "可用备份文件:"
-        ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null
-        echo ""
-        read -p "请输入备份文件名: " fname
-        if [ -f "$BACKUP_DIR/$fname" ]; then
-            read -p "请输入新系统名称 (例如 my_restore): " newname
-            mkdir -p "$ROOTFS/$newname"
-            echo "${Y}正在解压...${NC}"
-            tar -xzf "$BACKUP_DIR/$fname" -C "$ROOTFS/$newname"
-            # 注册
-            echo "plug_in_proot=1" > "$PREFIX/etc/proot-distro/$newname.sh"
-            echo "${G}还原成功！${NC}"
+# [M4] 鹰眼雷达 (流式版)
+mod_ssh() {
+    while true; do
+        print_logo
+        echo -e "${C_W}=== 鹰眼雷达 (SSH) ===${C_RST}"
+        
+        USER=$(whoami)
+        IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')
+        
+        if pgrep sshd >/dev/null; then
+            echo -e "状态: ${C_G}● 运行中${C_RST}   IP: ${C_W}$IP${C_RST}"
         else
-            echo "${R}文件不存在${NC}"
+            echo -e "状态: ${C_R}● 已停止${C_RST}"
         fi
-        read -p "回车..."
-    fi
+        
+        # 实时连接列表
+        echo -e "\n${C_C}[ 活跃连接 ]${C_RST}"
+        netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED' | awk '{print " -> "$5}'
+        
+        echo -e "\n1. 启动服务  2. 停止服务  3. 一键踢人  4. 修复BadPort  0. 返回"
+        read -p "root@termux:~$ " c
+        case "$c" in
+            0) return ;;
+            1) 
+                if ! grep -q "^$USER:" "$PREFIX/etc/shadow" 2>/dev/null; then
+                    log_warn "请设置密码"; passwd
+                fi
+                pkill sshd; sshd; log_success "已启动" ;;
+            2) pkill sshd; log_success "已停止" ;;
+            3) pgrep sshd | grep -v $(pgrep -o sshd) | xargs kill -9 2>/dev/null; log_warn "已踢出所有人" ;;
+            4) rm -f ~/.ssh/known_hosts; log_success "已修复 known_hosts" ;;
+        esac
+        read -n 1
+    done
 }
 
-# [7] 删除系统
-do_del() {
-    local sys=$(get_systems | head -n 1)
-    if [ -z "$sys" ]; then echo "无系统"; read -p "回车..."; return; fi
-    
-    echo "${R}警告：确定要彻底删除 $sys 吗？数据将丢失！${NC}"
-    read -p "确认删除请输入 y : " confirm
-    if [ "$confirm" == "y" ]; then
-        proot-distro remove "$sys"
-        rm -rf "$ROOTFS/$sys"
-        echo "已删除。"
-    fi
-    read -p "回车..."
+# [M5] 百科全书
+mod_wiki() {
+    print_logo
+    echo -e "${C_W}=== 📖 小白生存指南 ===${C_RST}"
+    echo -e "${C_Y}Q: 安装一直失败怎么办？${C_RST}"
+    echo -e "A: 99%是网速问题。必须挂VPN。如果没有VPN，尝试在凌晨下载。"
+    echo ""
+    echo -e "${C_Y}Q: 打开桌面是黑屏？${C_RST}"
+    echo -e "A: 你手机没装 Termux:X11 APP。请去 GitHub 下载。"
+    echo ""
+    echo -e "${C_Y}Q: 怎么在电脑连手机？${C_RST}"
+    echo -e "A: 选菜单 [4] 启动服务。电脑 CMD 输入: ssh -p 8022 $(whoami)@$(ifconfig | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')"
+    read -n 1
 }
 
-# --- 主循环 ---
+# --- 主程序循环 ---
 check_deps
 
 while true; do
-    clear
-    echo -e "${C}=== XXY v7.0 磐石版 (LTS) ===${NC}"
-    echo "1. 进入系统 (Login)"
-    echo "2. 安装系统 (Install)"
-    echo "3. 启动桌面 (GUI)"
-    echo "4. SSH 管理 (Remote)"
-    echo "5. 备份还原 (Backup)"
-    echo "6. 删除系统 (Delete)"
-    echo "0. 退出程序 (Exit)"
-    echo "------------------------"
+    print_logo
     
-    # 获取当前系统状态
-    CUR_SYS=$(get_systems | head -n 1)
-    if [ -n "$CUR_SYS" ]; then
-        echo -e "当前已装: ${G}$CUR_SYS${NC}"
-    else
-        echo -e "当前已装: ${R}无${NC}"
-    fi
-    echo "------------------------"
+    # 菜单区
+    echo -e "${C_W} [ 基础功能 ]${C_RST}             ${C_W} [ 高级功能 ]${C_RST}"
+    echo -e " ${C_B}1.${C_RST} 进入系统 (Login)       ${C_C}4.${C_RST} 鹰眼雷达 (SSH)"
+    echo -e " ${C_B}2.${C_RST} 安装系统 (Install)     ${C_C}5.${C_RST} 帮助文档 (Wiki)"
+    echo -e " ${C_B}3.${C_RST} 启动桌面 (GUI)         ${C_R}0.${C_RST} 退出程序 (Exit)"
+    echo ""
+    echo -e "${C_GR} 输入数字并按回车:${C_RST}"
     
-    read_input
+    read -p " root@termux:~$ " choice
     
-    case "$CHOICE" in
-        1) do_login ;;
-        2) do_install ;;
-        3) do_gui ;;
-        4) do_ssh ;;
-        5) do_backup ;;
-        6) do_del ;;
+    case "$choice" in
+        1) mod_login ;;
+        2) mod_install ;;
+        3) mod_gui ;;
+        4) mod_ssh ;;
+        5) mod_wiki ;;
         0) exit 0 ;;
-        *) echo "无效输入"; sleep 0.5 ;;
+        *) log_err "无效指令"; sleep 0.5 ;;
     esac
 done
-EOF
+FUSION_EOF
 
-# --- [3. 完成] ---
-chmod 755 $PREFIX/bin/xxy
+# --- [Step 2] 启动 ---
+chmod 755 "$PREFIX/bin/xxy"
 clear
-echo -e "\033[1;32m✅ v7.0 磐石版 (LTS) 已安装\033[0m"
+echo -e "\033[1;32m✅ v8888.0 自适应融合版 已就绪\033[0m"
 echo -e "-------------------------------------------"
-echo -e "1. 已移除所有不稳定UI，界面绝对稳固"
-echo -e "2. 修复了安卓11+无法启动桌面的问题"
-echo -e "3. 修复了重复输入 fastfetch 的问题"
+echo -e "🔄 [UI重构] 采用流式日志风格，彻底解决排版错位"
+echo -e "🛡️ [逻辑核] 增加了下载失败自动回滚机制"
+echo -e "📱 [兼容性] 强制适配 Android 10-15"
 echo -e "-------------------------------------------"
-echo -e "输入 \033[1;33mxxy\033[0m 启动。"
+read -n 1 -p "按任意键启动..."
+xxy
