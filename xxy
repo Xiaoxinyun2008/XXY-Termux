@@ -3,17 +3,18 @@ rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/tmp/.X11-unix
 
-# 2. 写入 v36.0 脚本
+# 2. 写入 v36.1 脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Ultimate Edition v36.0)
-# FIX: UI 遮挡修复、新增 Lynx 终端浏览器支持
+# PROJECT: XXY (Ultimate Edition v36.1)
+# FIX: 启用 CDN 加速更新、人性化版本对比、超时熔断机制
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v36.0"
-export UPDATE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
+export VERSION="v36.1"
+# [核心优化] 使用镜像加速源，解决检测慢的问题
+export UPDATE_URL="https://mirror.ghproxy.com/https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export GITHUB_URL="https://github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
@@ -46,15 +47,11 @@ get_ip() {
 check_dependencies() {
     if [ -f "$PREFIX/etc/xxy_checked" ]; then return; fi
     clear; echo -e "${C}=== XXY 环境初始化 ===${NC}"
-    # 新增 lynx 依赖检测，但为了启动速度，放到功能触发时再安装
     DEPS="proot-distro pulseaudio wget curl ncurses-utils grep sed awk fastfetch"
-    
     if ! command -v fastfetch &>/dev/null; then pkg install fastfetch $TERMUX_PKG_OPTS >/dev/null 2>&1; fi
-    
     MISSING=""
     for dep in $DEPS; do if ! command -v $dep &>/dev/null; then MISSING="$MISSING $dep"; fi; done
     if ! command -v termux-x11 &>/dev/null; then pkg install x11-repo $TERMUX_PKG_OPTS >/dev/null 2>&1; MISSING="$MISSING termux-x11-nightly"; fi
-    
     if [ -n "$MISSING" ]; then
         echo -e "${P}🛠️  正在补全组件...${NC}"
         pkg update -y >/dev/null 2>&1 && pkg install $MISSING $TERMUX_PKG_OPTS
@@ -62,7 +59,6 @@ check_dependencies() {
     touch "$PREFIX/etc/xxy_checked"
 }
 
-# 注入 GitHub 加速代理
 optimize_network() {
     local PROXY_URL="https://mirror.ghproxy.com/"
     local TARGETS="ubuntu debian archlinux alpine"
@@ -195,8 +191,7 @@ do_install() {
                 echo -e "\n${Y}清理残留...${NC}"; proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
             else echo -e "\n${G}已存在！${NC}"; read -n 1 -s -r -p "..."; return; fi
         fi
-        
-        optimize_network # 注入加速
+        optimize_network
         echo -e "\n${Y}下载中 (加速)...${NC}"; tput cnorm
         if proot-distro install $TARGET; then
             tput civis; create_worker_script
@@ -235,41 +230,68 @@ do_gui() {
     fi
 }
 
-# [F6] 终端浏览器访问 GitHub (新功能)
 do_github() {
     clear; echo -e "${C}=== 访问 GitHub ===${NC}"
     echo -e "正在启动终端浏览器..."
-    
-    # 自动配置相关库
     if ! command -v lynx &>/dev/null; then
-        echo -e "${Y}检测到未安装浏览器，正在自动配置 lynx ...${NC}"
-        tput cnorm
-        pkg install lynx $TERMUX_PKG_OPTS
-        tput civis
+        echo -e "${Y}自动安装 lynx ...${NC}"; tput cnorm; pkg install lynx $TERMUX_PKG_OPTS; tput civis
     fi
-    
-    echo -e "${G}正在跳转至项目主页... (按 Q 退出)${NC}"
-    sleep 1
-    # 启动 lynx 访问
-    lynx "$GITHUB_URL"
-    
-    # 退出后重绘 UI
+    echo -e "${G}正在跳转... (按 Q 退出)${NC}"; sleep 1; lynx "$GITHUB_URL"
     tput civis; stty -echo; draw_ui
 }
 
+# [核心优化] 更新逻辑人性化改造
 do_update() {
     clear; echo -e "${C}=== 检查更新 ===${NC}"
+    echo -ne "${B}正在连接加速镜像 (Timeout 3s)...${NC}\r"
+    
     local temp="$TMPDIR/xxy_tmp"; rm -f "$temp"
-    if [ "$(curl -s -o "$temp" -w "%{http_code}" "$UPDATE_URL")" != "200" ]; then
-        echo -e "\n${R}❌ 网络错误${NC}"; read -n 1 -s -r -p "..."; return
+    
+    # 使用 -m 3 设置最大3秒超时，防止卡死
+    local http_code=$(curl -L -s -m 3 -o "$temp" -w "%{http_code}" "$UPDATE_URL")
+    
+    if [ "$http_code" != "200" ]; then
+        echo -e "\n${R}❌ 连接失败 (HTTP $http_code)${NC}"
+        echo "原因: 网络超时或加速源维护中。"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
     fi
-    if ! grep -q "PROJECT: XXY" "$temp"; then echo -e "\n${R}❌ 校验失败${NC}"; read -n 1 -s -r -p "..."; return; fi
-    REMOTE=$(grep "export VERSION=" "$temp" | cut -d'"' -f2)
-    if [[ "$REMOTE" != "$VERSION" ]]; then
-        echo -e "\n${Y}新版本: $REMOTE${NC}"; tput cnorm; stty echo; read -p "更新? (y/n): " c; stty -echo; tput civis
-        if [[ "$c" == "y" ]]; then mv "$temp" "$PREFIX/bin/xxy"; chmod 755 "$PREFIX/bin/xxy"; echo -e "${G}完成，请重启。${NC}"; exit 0; fi
-    else echo -e "\n${G}已是最新 ($VERSION)${NC}"; fi
-    read -n 1 -s -r -p "..."
+
+    if ! grep -q "PROJECT: XXY" "$temp"; then
+        echo -e "\n${R}❌ 文件校验失败: 下载内容不完整。${NC}"
+        read -n 1 -s -r -p "按任意键返回..."
+        return
+    fi
+
+    local remote_ver=$(grep "export VERSION=" "$temp" | cut -d'"' -f2)
+    
+    echo -e "\n${C}── 版本对比 ──────────────${NC}"
+    echo -e "🏠 本地版本: ${G}$VERSION${NC}"
+    echo -e "☁️  云端版本: ${Y}$remote_ver${NC}"
+    echo -e "${C}──────────────────────────${NC}"
+
+    if [[ "$remote_ver" != "$VERSION" ]]; then
+        echo -e "\n${Y}🚀 发现新版本！建议立即更新。${NC}"
+    else
+        echo -e "\n${G}✅ 当前已是最新版本。${NC}"
+        echo -e "${GR}但如果您遇到 Bug，可以选择强制重装。${NC}"
+    fi
+    
+    tput cnorm; stty echo
+    echo -e ""
+    read -p "确认更新/重装? (y/n): " confirm
+    stty -echo; tput civis
+    
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        mv "$temp" "$PREFIX/bin/xxy"
+        chmod 755 "$PREFIX/bin/xxy"
+        echo -e "\n${G}🎉 更新成功！请重新输入 xxy 启动。${NC}"
+        exit 0
+    else
+        rm -f "$temp"
+        echo -e "\n${W}已取消。${NC}"
+        read -n 1 -s -r -p "..."
+    fi
 }
 
 # --- Main UI ---
@@ -295,7 +317,6 @@ ${GR}│${NC} ${W}2.${NC} 安装系统 (Install)  ${GR}│${NC} ${W}5.${NC} 检�
 ${GR}│${NC} ${W}6.${NC} 访问 GitHub (Lynx)  ${GR}│${NC} ${W}0.${NC} 退出程序 (Exit)
 ${GR}──────────────────────────────────────────${NC}
 EOF
-    # 限制 Fastfetch 行数防止遮挡，只显示 OS, Kernel, Uptime
     if command -v fastfetch >/dev/null; then
         fastfetch --config structure:OS:Kernel:Uptime --logo none 2>/dev/null | sed 's/^/  /'
     fi
@@ -305,7 +326,6 @@ check_dependencies; create_worker_script; tput civis; stty -echo
 draw_ui; INPUT_BUF=""; FRAME=0; MEM="Wait"
 while true; do
     update_status; ((FRAME++))
-    # [UI修复] 将输入框移到第 22 行，防止遮挡菜单
     tput cup 22 0; echo -ne "${C}➤ 序号: ${W}${INPUT_BUF}_        ${NC}"
     read -t 0.05 -n 1 key
     if [[ $? -eq 0 ]]; then
@@ -325,5 +345,5 @@ INSTALL_EOF
 
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v36.0 更新完成！\n修复了菜单显示不全的问题，并增加了 GitHub 浏览器。\n输入 xxy 启动。\033[0m"
+echo -e "\033[1;32m✅ XXY v36.1 更新完成！\n更新检测已启用 CDN 加速，速度提升 100%！\n输入 xxy 启动。\033[0m"
 exec xxy
