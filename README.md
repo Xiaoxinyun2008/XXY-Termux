@@ -53,31 +53,46 @@ Copy and paste the following command into your Termux terminal:
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy)"
 ```
-Note: After installation, simply type xxy to launch the tool anytime.
+Note: After installation, simply type xxy to launch the tool anytime.  
+
+
 🎮 Usage Guide
-Main Menu
+Main Menu  
+
 [1] Login System:
 Select an installed system to log in.
-Auto-Beautify: Automatically removes old neofetch config and injects a clean startup info.
+Auto-Beautify: Automatically removes old neofetch config and injects a clean startup info.  
+
 [2] Install New System:
 Supported: Ubuntu, Debian, Kali, Arch, Alpine.
-Automation: Automatically updates sources, installs Chinese fonts, and configures locales.
+Automation: Automatically updates sources, installs Chinese fonts, and configures locales.  
+
 [3] GUI Mode (Desktop):
 One-click setup for XFCE4 desktop.
-Auto-detects installation status.
+Auto-detects installation status.  
+
 [4] Uninstall:
-Safely removes the system and cleans up residual files.
+Safely removes the system and cleans up residual files.  
+
+
 🖥️ GUI Mode (Desktop) Support
 Mode	Description
-1. Termux:X11	(Recommended) Hardware accelerated, smooth performance. Requires the Termux:X11 app.
-2. VNC Viewer	Universal mode. Works with any VNC Viewer app. Address: 127.0.0.1:5901.
-❓ Troubleshooting
+1. Termux:X11	(Recommended) Hardware accelerated, smooth performance. Requires the ```Termux:X11``` app.
+2. VNC Viewer	Universal mode. Works with any VNC Viewer app. Address: ```127.0.0.1:5901```.
+
+
+❓ Troubleshooting  
+
 Q: My cursor disappeared!
-A: Just run xxy again and exit properly using option 0. The new v32.0 self-healing logic will fix it.
-Q: Why is installation slow?
-A: It depends on your network connection to the Linux mirrors. Use termux-change-repo to switch to a faster mirror.
-Q: How to update to v32.0?
-A: Simply re-run the installation command. It will overwrite the old version automatically.
+A: Just run xxy again and exit properly using option 0. The new v32.0 self-healing logic will fix it.  
+
+Q: Why is installation slow? 
+A: It depends on your network connection to the Linux mirrors. Use termux-change-repo to switch to a faster mirror.  
+
+Q: How to update to v32.0? 
+A: Simply re-run the installation command. It will overwrite the old version automatically.  
+
+
 🤝 Contribution
 Contributions are welcome!
 Fork the Project
