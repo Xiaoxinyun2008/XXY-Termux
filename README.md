@@ -52,11 +52,10 @@ termux-setup-storage
 🚀 One-Click Install Command
 
 Copy and paste the following command into your Termux terminal:
-code
-Bash
+
 # Download and install XXY
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/XXY-Termux/main/xxy)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy)"
 ```
 Note: Replace YOUR_GITHUB_USERNAME with your actual GitHub username.
 
@@ -67,24 +66,31 @@ Once installed, simply type xxy to launch the tool.
 [2] Install New System: Choose from Ubuntu, Debian, Kali, Arch, or Alpine.
 [3] GUI Mode: Launch XFCE4 Desktop environment (supports X11 and VNC).
 [4] Manage: Uninstall or backup your systems.
-2. GUI Mode (Desktop)
+
+3. GUI Mode (Desktop)
 XXY supports two display modes:
 Termux:X11 (Recommended): Requires the Termux:X11 companion app. Offers smooth performance and hardware acceleration.
-VNC Viewer: Compatible with any VNC viewer app. Address: 127.0.0.1:5901.
+VNC Viewer: Compatible with any VNC viewer app. Address: ```127.0.0.1:5901```
+
+
 ❓ Troubleshooting
 Q: Why does the installation fail?
 A: Please check your internet connection. If you are in a restricted network region, you may need a proxy/VPN.
 Q: I see a black screen when starting the GUI.
 A: Select the GUI Mode again. The script now includes a "Violent Cleanup" feature that kills zombie processes (com.termux.x11) and clears /tmp/.X11-unix.
 Q: How to update XXY?
-A: Simply re-run the installation command. It will overwrite the old version with the new v29.0.
+A: Simply re-run the installation command. It will overwrite the old version with the new v29.0.  
+
+
 🤝 Contribution
 Contributions are welcome! If you find a bug or want to add a new feature (e.g., Fedora support), please open an Issue or Pull Request.
 Fork the Project
 Create your Feature Branch
 Commit your Changes
 Push to the Branch
-Open a Pull Request
+Open a Pull Request  
+
+
 📄 License
 Distributed under the GPL-3.0 License. See LICENSE for more information.
 <div align="center">
