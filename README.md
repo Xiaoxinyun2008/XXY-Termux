@@ -1,80 +1,87 @@
-# 🚀 XXY - Universal Edition v29.0: The Ultimate Termux Container Manager
+# 🚀 XXY - Termux Universal Container Manager (v29.0)
 
 <div align="center">
 
-[![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
-[![Version](https://img.shields.io/badge/Version-v29.0-blue?style=for-the-badge)](https://github.com/)
+![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:00C9FF,100:92FE9D&height=200&section=header&text=XXY%20Project&fontSize=80&animation=fadeIn&fontAlignY=35&desc=The%20Ultimate%20Linux%20Solution%20for%20Termux&descAlignY=55&descAlign=50)
+
+[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
+[![Version](https://img.shields.io/badge/Release-v29.0-blue?style=for-the-badge&logo=github)](https://github.com/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
-[![Language](https://img.shields.io/badge/Lang-Bash%20Script-yellow?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-orange?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev/)
 
 </div>
 
 ---
 
-## 🌏 Global Access & Chinese User Guide
+## 🌐 Language / 语言
 
-**[IMPORTANT]** If you are a Chinese user or need specific optimizations for **Mainland China networks (Mirrors, Fonts, Locale)**, please switch to the Chinese documentation:
-
-👉 **[🇨🇳 点击这里查看中文文档 (Click for Chinese Docs)](README_CN.md)**
+> **Chinese Users (中国用户)**: Please click the link below for the optimized Chinese documentation.
+>
+> 👉 **[🇨🇳 点击这里查看中文文档 / Chinese Documentation](README_CN.md)**
 
 ---
 
-## 💡 I. Project Philosophy: Zero Cognitive Friction
+## 📖 Introduction
 
-The primary goal of **XXY** is to eliminate all **Cognitive Friction** for beginners deploying Linux environments on Android (Termux). By introducing a highly optimized "Foolproof" logic, we reduce the deployment difficulty **from hours to minutes**.
+**XXY** is a powerful shell script designed to revolutionize the Linux experience on Termux. It serves as a wrapper around `proot-distro`, providing a **menu-driven interface** that eliminates the need for complex commands.
 
-### 🔥 Core Features (v29.0)
+Whether you are a beginner looking for a "One-Click" desktop installation or a developer needing a quick environment setup, XXY v29.0 handles dependencies, localization, and desktop environments (GUI) automatically.
+
+### 🔥 Key Features (v29.0)
 
 | Feature | Description |
 | :--- | :--- |
-| **🛡️ Foolproof Interaction** | **Global "Back" Button (0)** added to every menu. Prevents users from getting stuck in sub-menus. Input validation prevents crashes. |
-| **🖥️ GUI Seamless Switch** | One-click toggle between **Termux:X11** (Hardware Accelerated) and **VNC Server** (Legacy/Remote). Includes auto-cleanup for "zombie" processes. |
-| **✨ Auto-Beautification** | Automatically detects and installs **Fastfetch** (or Neofetch). Injects startup info into `.bashrc` intelligently. |
-| **📦 Multi-Distro Engine** | Unified logic for **Debian, Ubuntu, Kali, Arch, Alpine**. One script engine controls `apt`, `pacman`, `apk`, and `dnf`. |
-| **🔧 Deep Cleaning** | Includes a "Violent Cleanup" mode for audio services (PulseAudio) and X11 lock files to fix black screen issues. |
+| **🛡️ Foolproof Navigation** | **Global "Back" Button (0)** integrated into every menu. Prevents users from getting stuck in sub-menus. |
+| **🤖 Auto-Package Logic** | A universal engine that intelligently detects `apt`, `pacman`, `apk`, or `dnf` and executes the correct commands for specific distros. |
+| **🎨 Smart Beautification** | Automatically installs **Fastfetch** (or falls back to Neofetch) and injects startup info into `.bashrc` for a professional look. |
+| **🖥️ X11 & VNC Manager** | Seamlessly switches between **Termux:X11** (Hardware Acceleration) and **VNC Server**. Includes "Violent Cleanup" to fix black screen issues. |
+| **🌍 Localization** | Automatically configures **Chinese Fonts (Noto CJK)** and Locale settings (`zh_CN.UTF-8`) to fix character rendering issues. |
 
 ---
 
-## 🛠️ II. Installation Guide
+## 🛠️ Installation
 
 ### Prerequisites
-
-Ensure Termux is installed and storage permission is granted:
+Before installing, ensure your Termux is up to date and storage permissions are granted.
 
 ```bash
-# 1. Update Base System
-pkg update && pkg upgrade -y
-
-# 2. Install Dependencies
-pkg install proot-distro pulseaudio wget -y
-
-# 3. Grant Storage Permission
+pkg update -y && pkg upgrade -y
+pkg install proot-distro curl -y
 termux-setup-storage
-🚀 One-Click Installation
-Copy and paste the following command into Termux:
+🚀 One-Click Install Command
+Copy and paste the following command into your Termux terminal:
 code
 Bash
-# Replace the URL below with your actual raw file link (e.g., GitHub Raw)
-curl -L https://raw.githubusercontent.com/YOUR_USERNAME/XXY/main/xxy.sh > $PREFIX/bin/xxy
-
-# Grant execution permission
-chmod +x $PREFIX/bin/xxy
-
-# Run the program
-xxy
-🤝 III. Contribution Standards
-We invite developers to help build a robust ecosystem.
-i18n: Add high-speed mirrors for regions outside China.
-Compatibility: Test on Android 12/13/14 and report phantom process issues.
-Code: Improve the get_universal_script logic for more distros (Fedora/OpenSUSE).
-Bug Reporting
-Environment: Phone Model / Android Version.
-Log: Provide the error output.
-Note: Vague reports like "It doesn't work" will be ignored to preserve maintainer energy.
-⚖️ IV. License & Disclaimer
-This project is open-sourced under the GPL-3.0 License.
-This tool is for educational purposes only.
-The author assumes no liability for data loss or misuse.
+# Download and install XXY
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/XXY-Termux/main/xxy)"
+Note: Replace YOUR_GITHUB_USERNAME with your actual GitHub username.
+🎮 Usage Guide
+1. Main Menu
+Once installed, simply type xxy to launch the tool.
+[1] Login System: Quickly login to your installed Linux container.
+[2] Install New System: Choose from Ubuntu, Debian, Kali, Arch, or Alpine.
+[3] GUI Mode: Launch XFCE4 Desktop environment (supports X11 and VNC).
+[4] Manage: Uninstall or backup your systems.
+2. GUI Mode (Desktop)
+XXY supports two display modes:
+Termux:X11 (Recommended): Requires the Termux:X11 companion app. Offers smooth performance and hardware acceleration.
+VNC Viewer: Compatible with any VNC viewer app. Address: 127.0.0.1:5901.
+❓ Troubleshooting
+Q: Why does the installation fail?
+A: Please check your internet connection. If you are in a restricted network region, you may need a proxy/VPN.
+Q: I see a black screen when starting the GUI.
+A: Select the GUI Mode again. The script now includes a "Violent Cleanup" feature that kills zombie processes (com.termux.x11) and clears /tmp/.X11-unix.
+Q: How to update XXY?
+A: Simply re-run the installation command. It will overwrite the old version with the new v29.0.
+🤝 Contribution
+Contributions are welcome! If you find a bug or want to add a new feature (e.g., Fedora support), please open an Issue or Pull Request.
+Fork the Project
+Create your Feature Branch
+Commit your Changes
+Push to the Branch
+Open a Pull Request
+📄 License
+Distributed under the GPL-3.0 License. See LICENSE for more information.
 <div align="center">
 <sub>Built with ❤️ by the XXY Team</sub>
 </div>
