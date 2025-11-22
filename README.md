@@ -4,9 +4,9 @@
 
 ![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:00C9FF,100:92FE9D&height=200&section=header&text=XXY%20Project&fontSize=80&animation=fadeIn&fontAlignY=35&desc=AI%20Optimized%20Edition%20v32.0&descAlignY=55&descAlign=50)
 
-[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
-[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
+[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/Xiaoxinyun2008/XXY-Termux)
+[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/Xiaoxinyun2008/XXY-Termux/releases/latest)
+[![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-orange?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev/)
 
 </div>
@@ -18,6 +18,15 @@
 > **Chinese Users (中国用户)**: Please click the link below for the Chinese documentation.
 >
 > 👉 **[🇨🇳 点击这里查看中文文档 / Chinese Documentation](README_CN.md)**
+
+---
+
+## 📚 Documentation Hub
+
+- [Quickstart Guide](QUICKSTART.md) – copy-paste friendly onboarding flow for new devices.
+- [CHANGELOG](CHANGELOG.md) – detailed release notes for every version.
+- [IMPROVEMENTS](IMPROVEMENTS.md) – AI optimization summary and architecture notes.
+- [version.txt](version.txt) – single source of truth for the installer version.
 
 ---
 
@@ -43,7 +52,11 @@ It serves as a smart wrapper around `proot-distro`, providing a **menu-driven in
 ## 🛠️ Installation
 
 ### Prerequisites
-Before installing, ensure your Termux is up to date.
+Before installing, ensure your Termux environment is ready:
+
+- Install the latest [Termux](https://f-droid.org/packages/com.termux/) build from F-Droid (or grab the [GitHub release](https://github.com/termux/termux-app/releases)).
+- (Optional but recommended for GUI mode) Install [Termux:X11](https://github.com/termux/termux-x11/releases).
+- Update package sources so `proot-distro` and `curl` are on the latest versions.
 
 ```bash
 pkg update -y && pkg upgrade -y
@@ -78,8 +91,8 @@ Safely removes the system and cleans up residual files.
 
 🖥️ GUI Mode (Desktop) Support
 Mode	Description
-1. Termux:X11	(Recommended) Hardware accelerated, smooth performance. Requires the ```Termux:X11``` app.
-2. VNC Viewer	Universal mode. Works with any VNC Viewer app. Address: ```127.0.0.1:5901```.
+1. [Termux:X11](https://github.com/termux/termux-x11/releases)	(Recommended) Hardware accelerated, smooth performance. Requires installing the Termux:X11 companion app.
+2. [RealVNC / any VNC Viewer](https://www.realvnc.com/en/connect/download/viewer/)	Universal mode that works with any VNC Viewer app. Address: ```127.0.0.1:5901```.
 
 
 ❓ Troubleshooting  
@@ -107,6 +120,19 @@ Create your Feature Branch
 Commit your Changes
 Push to the Branch
 Open a Pull Request
+- Report bugs or request features via [GitHub Issues](https://github.com/Xiaoxinyun2008/XXY-Termux/issues/new/choose)
+
+---
+
+## 🔗 Helpful Links
+
+- Project home: https://github.com/Xiaoxinyun2008/XXY-Termux
+- Latest release & changelog: https://github.com/Xiaoxinyun2008/XXY-Termux/releases
+- Quickstart & operations guide: [QUICKSTART.md](QUICKSTART.md)
+- 中文文档: [README_CN.md](README_CN.md)
+- Official Termux builds: https://f-droid.org/packages/com.termux/
+- Termux:X11 display server: https://github.com/termux/termux-x11/releases
+
 <div align="center">
 License
 Distributed under the GPL-3.0 License.

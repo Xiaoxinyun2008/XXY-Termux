@@ -4,9 +4,9 @@
 
 ![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:00C9FF,100:92FE9D&height=200&section=header&text=XXY%20Project&fontSize=80&animation=fadeIn&fontAlignY=35&desc=%E4%B8%93%E4%B8%BATermux%E6%89%93%E9%80%A0%E7%9A%84Linux%E7%AE%A1%E7%90%86%E5%99%A8&descAlignY=55&descAlign=50)
 
-[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
-[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
+[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/Xiaoxinyun2008/XXY-Termux)
+[![Version](https://img.shields.io/badge/Release-v5.0-blue?style=for-the-badge&logo=github)](https://github.com/Xiaoxinyun2008/XXY-Termux/releases/latest)
+[![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-orange?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev/)
 
 </div>
@@ -18,6 +18,15 @@
 > **English Users (英语用户)**: Please click the link below to view the English documentation.
 >
 > 👉 **[🇺🇸 点击此处查看英文文档 / English Documentation](README.md)**
+
+---
+
+## 📚 文档索引
+
+- [QUICKSTART.md](QUICKSTART.md) – 新设备初始化与日常操作速查。
+- [CHANGELOG.md](CHANGELOG.md) – 完整更新日志与版本说明。
+- [IMPROVEMENTS.md](IMPROVEMENTS.md) – AI 优化内容与架构笔记。
+- [version.txt](version.txt) – 安装脚本使用的版本号来源。
 
 ---
 
@@ -43,7 +52,11 @@
 ## 🛠️ 安装指南
 
 ### 1. 环境要求
-在安装之前，请确保您的 Termux 基础环境是最新的。
+在安装之前，请确保 Termux 基础环境准备就绪：
+
+- 前往 [F-Droid 下载最新版 Termux](https://f-droid.org/packages/com.termux/)（或使用 [Termux GitHub 版本](https://github.com/termux/termux-app/releases)）。
+- 如果计划使用桌面模式，提前安装 [Termux:X11](https://github.com/termux/termux-x11/releases)。
+- 通过 `pkg update && pkg upgrade` 更新所有软件源，确保 `proot-distro` 与 `curl` 为最新版本。
 
 ```bash
 pkg update -y && pkg upgrade -y
@@ -80,8 +93,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termu
 
 🖥️ 桌面模式支持 (GUI)
 模式	说明
-1. Termux:X11	(强烈推荐) 支持硬件加速，提供 60FPS 的流畅体验。需要安装 ```Termux:X11``` 配套 APP。
-2. VNC Viewer	(通用兼容) 适用于任何 VNC 客户端（如 RealVNC）。连接地址: ```127.0.0.1:5901```。
+1. [Termux:X11](https://github.com/termux/termux-x11/releases)	(强烈推荐) 支持硬件加速，提供 60FPS 的流畅体验。需要安装 Termux:X11 配套 APP。
+2. [VNC Viewer（RealVNC 等）](https://www.realvnc.com/en/connect/download/viewer/)	(通用兼容) 适用于任何 VNC 客户端。连接地址: ```127.0.0.1:5901```。
 
 
 ❓ 常见问题解答 (FAQ)  
@@ -109,6 +122,19 @@ A: 日志文件保存在 `~/.xxy/logs/` 目录中。程序会自动清理 7 天�
 提交您的更改 (git commit -m '添加了某个很棒的功能')
 推送到分支 (git push origin feature/新功能)
 发起拉取请求 (Pull Request)
+- 通过 [GitHub Issues](https://github.com/Xiaoxinyun2008/XXY-Termux/issues/new/choose) 反馈 Bug 或提出功能需求
+
+---
+
+## 🔗 实用链接
+
+- 项目主页: https://github.com/Xiaoxinyun2008/XXY-Termux
+- 最新发布 / 更新日志: https://github.com/Xiaoxinyun2008/XXY-Termux/releases
+- 快速上手指南: [QUICKSTART.md](QUICKSTART.md)
+- 英文文档: [README.md](README.md)
+- Termux 官方安装来源: https://f-droid.org/packages/com.termux/
+- Termux:X11 显示服务: https://github.com/termux/termux-x11/releases
+
 <div align="center">
 开源协议
 本项目遵循 GPL-3.0 协议发布。
