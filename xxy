@@ -3,21 +3,22 @@ rm -f $PREFIX/bin/xxy
 rm -f $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/tmp/.X11-unix
 
-# 2. 写入脚本
+# 2. 写入 v35.3 脚本
 cat > $PREFIX/bin/xxy << 'INSTALL_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# PROJECT: XXY (Ultimate Edition v35.2)
-# FIX: 双重验证系统完整性、自动清理下载残留、修复检测乱码
+# PROJECT: XXY (Ultimate Edition v35.3)
+# FIX: 注入 GitHub 加速代理，解决无 VPN 下载失败问题
 # ==============================================================================
 
 # --- 0. 全局配置 ---
-export VERSION="v35.2"
+export VERSION="v35.3"
 export UPDATE_URL="https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy"
 export GITHUB_LINK="github.com/Xiaoxinyun2008/XXY-Termux"
 export PREFIX="/data/data/com.termux/files/usr"
 export TMPDIR="$PREFIX/tmp"
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
+export PD_CONF="$PREFIX/etc/proot-distro"
 export TERMUX_PKG_OPTS="-y -o Dpkg::Options::=--force-confnew" 
 
 [ ! -d "$TMPDIR" ] && mkdir -p "$TMPDIR"
@@ -57,21 +58,33 @@ check_dependencies() {
     touch "$PREFIX/etc/xxy_checked"
 }
 
-# --- 2. 容器检测核心 (双重验证) ---
-
-# [Bug修复] 权威检测系统列表
-get_systems() {
-    # 1. 使用 proot-distro list 作为权威源，屏蔽报错，去除颜色
-    local raw_list=$(proot-distro list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+# [核心新增] 劫持 proot-distro 配置文件实现下载加速
+optimize_network() {
+    # GitHub 加速代理前缀 (选用稳定的公益代理)
+    local PROXY_URL="https://mirror.ghproxy.com/"
+    local TARGETS="ubuntu debian archlinux alpine"
     
-    # 2. 提取 Installed 列表
-    local candidates=$(echo "$raw_list" | awk '/^Installed distributions:/{flag=1; next} /^Supported distributions:/{flag=0} flag && /\*/ {print $2}')
-    
-    # 3. 校验文件系统完整性 (排除下载失败的残留)
-    for sys in $candidates; do
-        if [ -f "$ROOTFS_BASE/$sys/bin/sh" ]; then
-            echo "$sys"
+    for distro in $TARGETS; do
+        local conf_file="$PD_CONF/$distro.sh"
+        if [ -f "$conf_file" ]; then
+            # 检查是否已经注入过，防止重复注入
+            if ! grep -q "mirror.ghproxy.com" "$conf_file"; then
+                # 使用 sed 替换 TARBALL_URL
+                # 匹配 TARBALL_URL="https://github.com... 或 TARBALL_URL='https://github.com...
+                sed -i "s|TARBALL_URL=['\"]https://github.com|TARBALL_URL=\"${PROXY_URL}https://github.com|g" "$conf_file"
+                # 确保闭合引号也被正确处理 (有些是单引号有些是双引号，统一转为双引号开头更安全，或者仅替换头部)
+            fi
         fi
+    done
+}
+
+# --- 2. 容器检测核心 ---
+
+get_systems() {
+    local raw_list=$(proot-distro list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+    local candidates=$(echo "$raw_list" | awk '/^Installed distributions:/{flag=1; next} /^Supported distributions:/{flag=0} flag && /\*/ {print $2}')
+    for sys in $candidates; do
+        if [ -f "$ROOTFS_BASE/$sys/bin/sh" ]; then echo "$sys"; fi
     done
 }
 
@@ -181,16 +194,22 @@ do_install() {
     if [ "$idx" == "0" ]; then return; fi
     if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#DISTROS[@]}" ]; then
         TARGET=${DISTROS[$((idx-1))]}
-        # [核心] 检查尸体文件
+        
+        # [残留检测]
         if [ -d "$ROOTFS_BASE/$TARGET" ]; then
             if [ ! -f "$ROOTFS_BASE/$TARGET/bin/sh" ]; then
-                echo -e "\n${Y}清理上次安装失败的残留...${NC}"
+                echo -e "\n${Y}清理残留...${NC}"
                 proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
             else
-                echo -e "\n${G}系统已存在！${NC}"; read -n 1 -s -r -p "..."; return
+                echo -e "\n${G}已存在！${NC}"; read -n 1 -s -r -p "..."; return
             fi
         fi
-        echo -e "\n${Y}正在下载 $TARGET...${NC}"; tput cnorm
+        
+        # [核心优化] 注入加速链接
+        echo -e "\n${B}正在优化下载线路 (Mirror)...${NC}"
+        optimize_network
+        
+        echo -e "${Y}正在下载 $TARGET...${NC}"; tput cnorm
         if proot-distro install $TARGET; then
             tput civis; create_worker_script
             run_task "$TARGET" "change_source" "更换国内源"
@@ -198,8 +217,8 @@ do_install() {
             run_task "$TARGET" "install_fastfetch" "安装工具"
             echo -e "\n${G}🎉 安装完成！${NC}"; read -n 1 -s -r -p "..."
         else
-            # [核心] 失败回滚
-            echo -e "\n${R}❌ 安装失败，正在清理...${NC}"
+            # [失败回滚]
+            echo -e "\n${R}❌ 安装失败，清理中...${NC}"
             proot-distro remove $TARGET >/dev/null 2>&1; rm -rf "$ROOTFS_BASE/$TARGET"
             read -n 1 -s -r -p "..."
         fi
@@ -233,6 +252,8 @@ do_update() {
     clear; echo -e "${C}=== 检查更新 ===${NC}"
     echo -ne "${B}连接服务器...${NC}\r"
     local temp="$TMPDIR/xxy_tmp"; rm -f "$temp"
+    # 使用加速代理检查更新 (防止更新脚本本身也因为无VPN失败)
+    # 注意：这里你可以选择是否给 update url 也加代理，视情况而定。这里暂时保持原样，因为通常脚本很小。
     if [ "$(curl -s -o "$temp" -w "%{http_code}" "$UPDATE_URL")" != "200" ]; then
         echo -e "\n${R}❌ 网络错误${NC}"; read -n 1 -s -r -p "..."; return
     fi
@@ -291,5 +312,5 @@ INSTALL_EOF
 
 chmod 755 $PREFIX/bin/xxy
 sed -i 's/\r$//' $PREFIX/bin/xxy
-echo -e "\033[1;32m✅ XXY v35.2 更新完成！\n修复了系统残留检测Bug。\n输入 xxy 启动。\033[0m"
+echo -e "\033[1;32m✅ XXY v35.3 更新完成！\n已启用 GitHub 下载加速，无 VPN 也能极速安装！\n输入 xxy 启动。\033[0m"
 exec xxy
