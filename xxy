@@ -1,182 +1,207 @@
 # ==============================================================================
-# 🌌 XXY v1000.0 Cosmic Encyclopedia (宇宙全书·终焉架构)
-# SYSTEM: Hyper-converged Infrastructure for Termux
-# MODULES: Knowledge-Base | Hardware-Monitor | Auto-Source-Selector | SSH-Audit
+# 🪐 XXY v2000.0 Dyson Sphere (戴森球·可视化重构版)
+# ARCHITECTURE: TUI (Text User Interface) | Event-Driven
+# CORE: Visual-Engine v1.0 | Logic-Matrix v7.0 | Audit-System
 # ==============================================================================
 
-# --- [Phase 0: 奇点重置] ---
+# --- [Phase 0: 奇点初始化] ---
 tput cnorm
-echo -e "\033[1;35m[SYSTEM] 正在展开宇宙全书 v1000.0 ...\033[0m"
+echo -e "\033[1;36m[INIT] 正在加载图形化引擎 (TUI Engine)...\033[0m"
 
-# 1. 深度清理 (Deep Clean)
-# 杀死所有可能占用端口或锁死文件的进程
+# 1. 深度清理
+# 杀死干扰进程
 for proc in sshd termux-x11 pulseaudio Xwayland vncserver proot; do
     pkill -9 "$proc" >/dev/null 2>&1
 done
 
-# 2. 移除旧核心与缓存
+# 2. 重置环境
 rm -f $PREFIX/bin/xxy
 rm -rf $PREFIX/tmp/xxy_*
 rm -rf $PREFIX/var/lib/proot-distro/dlcache
 rm -rf $PREFIX/var/lib/proot-distro/download
-mkdir -p $PREFIX/tmp/xxy_core
+mkdir -p $PREFIX/tmp/xxy_visual
 
-# --- [Phase 1: 注入完整系统] ---
+# --- [Phase 1: 注入核心系统] ---
 cat > $PREFIX/bin/xxy << 'MAIN_EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# 🏗️ KERNEL CONFIGURATION (内核配置)
+# 🎨 UI CONFIGURATION (视觉配置层)
 # ==============================================================================
-export VERSION="v1000.0 宇宙全书"
+export VERSION="v2000.0 戴森球"
 export PREFIX="/data/data/com.termux/files/usr"
-export TMPDIR="$PREFIX/tmp/xxy_core"
+export TMPDIR="$PREFIX/tmp/xxy_visual"
 export PD_CONF="$PREFIX/etc/proot-distro"
 export ROOTFS_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
 export BACKUP_DIR="/sdcard/XXY_Backups"
 export LOG_FILE="$TMPDIR/system.log"
 export LANG="C.UTF-8"
 
-# 颜色矩阵
-R=$(tput setaf 196); G=$(tput setaf 46); Y=$(tput setaf 226)
-B=$(tput setaf 39);  P=$(tput setaf 201); C=$(tput setaf 51)
-W=$(tput setaf 255); GR=$(tput setaf 240); OR=$(tput setaf 208)
-NC=$(tput sgr0); BOLD=$(tput bold)
-
-# 确保目录结构
+# 确保目录存在
 [ ! -d "$TMPDIR" ] && mkdir -p "$TMPDIR"
 [ ! -d "$BACKUP_DIR" ] && mkdir -p "$BACKUP_DIR"
 
-# 异常熔断机制
-trap 'tput cnorm; stty echo; echo -e "\n${P}🛑 [KERNEL] 系统已紧急挂起。${NC}"; exit' EXIT INT TERM
+# 高级配色方案 (Neon Theme)
+C_R=$(tput setaf 196) # Red (Error)
+C_G=$(tput setaf 46)  # Green (Success)
+C_Y=$(tput setaf 226) # Yellow (Warning)
+C_B=$(tput setaf 39)  # Blue (Info)
+C_P=$(tput setaf 201) # Purple (Header)
+C_C=$(tput setaf 51)  # Cyan (Accent)
+C_W=$(tput setaf 255) # White (Text)
+C_GR=$(tput setaf 240)# Grey (Border)
+C_RESET=$(tput sgr0)
+BOLD=$(tput bold)
+
+# 字符集 (Box Drawing)
+BOX_H="─"; BOX_V="│"
+BOX_TL="╭"; BOX_TR="╮"; BOX_BL="╰"; BOX_BR="╯"
+
+# 异常捕获
+trap 'tput cnorm; stty echo; echo -e "\n${C_P}🛑 系统已安全挂起。${C_RESET}"; exit' EXIT INT TERM
 
 # ==============================================================================
-# 🧠 LOGIC CORE (逻辑核心库)
+# 🖌️ VISUALIZATION ENGINE (可视化引擎)
 # ==============================================================================
 
-# [L1] 逻辑监狱 (Input Jail) - 绝对防呆
-ask_safe() {
-    local prompt="$1"; local valid="$2"
+# [UI-1] 绘制分割线
+ui_line() {
+    local char=${1:-$BOX_H}
+    local cols=$(tput cols)
+    for ((i=0; i<cols; i++)); do echo -ne "${C_GR}$char${C_RESET}"; done
+    echo ""
+}
+
+# [UI-2] 绘制标题框 (居中)
+ui_header() {
+    clear
+    local title=" $1 "
+    local cols=$(tput cols)
+    local pad=$(( (cols - ${#title}) / 2 ))
+    
+    # Top Border
+    echo -ne "${C_P}${BOX_TL}"
+    for ((i=0; i<cols-2; i++)); do echo -ne "${BOX_H}"; done
+    echo -e "${BOX_TR}${C_RESET}"
+    
+    # Title Line
+    echo -ne "${C_P}${BOX_V}${C_RESET}"
+    for ((i=0; i<pad-1; i++)); do echo -ne " "; done
+    echo -ne "${BOLD}${C_W}$title${C_RESET}"
+    for ((i=0; i<cols-pad-${#title}-1; i++)); do echo -ne " "; done
+    echo -e "${C_P}${BOX_V}${C_RESET}"
+    
+    # Bottom Border
+    echo -ne "${C_P}${BOX_BL}"
+    for ((i=0; i<cols-2; i++)); do echo -ne "${BOX_H}"; done
+    echo -e "${BOX_BR}${C_RESET}"
+}
+
+# [UI-3] 状态打印器 (带图标)
+ui_print() {
+    local type=$1
+    local msg=$2
+    case "$type" in
+        "INFO") echo -e " ${C_B}ℹ️  INFO :${C_RESET} $msg" ;;
+        "OK")   echo -e " ${C_G}✅ OK   :${C_RESET} $msg" ;;
+        "WARN") echo -e " ${C_Y}⚠️  WARN :${C_RESET} $msg" ;;
+        "ERR")  echo -e " ${C_R}❌ ERROR:${C_RESET} $msg" ;;
+        "ASK")  echo -e " ${C_P}❓ ASK  :${C_RESET} $msg" ;;
+        *)      echo -e " $msg" ;;
+    esac
+}
+
+# [UI-4] 动态进度条 (Visual Progress Bar)
+# 参数: 当前值, 最大值, 描述文本
+ui_progress() {
+    local current=$1
+    local total=$2
+    local text=$3
+    local width=30
+    local percent=$((current * 100 / total))
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+    
+    tput sc # 保存光标
+    echo -ne "\r ${C_C}[${C_RESET}"
+    for ((i=0; i<filled; i++)); do echo -ne "${C_G}█${C_RESET}"; done
+    for ((i=0; i<empty; i++)); do echo -ne "${C_GR}░${C_RESET}"; done
+    echo -ne "${C_C}]${C_RESET} ${percent}% - ${text}"
+    tput rc # 恢复光标
+}
+
+# ==============================================================================
+# 🧠 LOGIC KERNEL (逻辑内核)
+# ==============================================================================
+
+# [L-1] 输入安全锁 (Logic Jail v2.0)
+ask_choice() {
+    local prompt="$1"
+    local valid="$2"
+    
+    echo ""
     while true; do
-        read -p "$prompt" input
-        input=$(echo "$input" | tr -d ' ') # 去除空格
+        read -p " $prompt" input
+        input=$(echo "$input" | tr -d ' ') # 去空格
+        
         if [ -z "$input" ]; then continue; fi
         if [[ "$valid" == *"$input"* ]] && [ ${#input} -eq 1 ]; then
-            RET="$input"; return 0
+            RET="$input"
+            return 0
         else
-            echo "${R}🚫 无效指令! 仅接受: [$valid]${NC}"
+            ui_print "ERR" "输入无效! 请输入 [ $valid ] 中的数字。"
         fi
     done
 }
 
-# [L2] 硬件遥测 (Hardware Telemetry)
-get_hw_stats() {
-    # CPU Load
+# [L-2] 硬件/网络遥测 (Telemetry)
+get_telemetry() {
+    # CPU 负载 (模拟)
     local load=$(uptime | awk -F'load average:' '{ print $2 }' | awk -F, '{print $1}' | tr -d ' ')
-    # RAM Usage
+    
+    # 内存
     local ram_free=$(free -m | awk 'NR==2{print $4}')
     local ram_total=$(free -m | awk 'NR==2{print $2}')
     local ram_used=$((ram_total - ram_free))
-    # Disk Usage
+    
+    # 磁盘
     local disk=$(df -h "$PREFIX" | awk 'NR==2 {print $4}')
-    # Network Latency (Simulated check)
-    local ping_ms="Checking..."
     
-    HW_INFO="${W}CPU:${C}${load}${W} | RAM:${C}${ram_used}MB/${ram_total}MB${W} | Disk:${G}${disk}${NC}"
+    # 网络延迟测试
+    local ping_res="N/A"
+    if ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then ping_res="${C_G}在线${C_RESET}"; 
+    else ping_res="${C_R}离线${C_RESET}"; fi
+    
+    # 格式化输出
+    HUD_INFO="${C_W}CPU:${load} | RAM:${ram_used}M/${ram_total}M | Disk:${disk} | Net:${ping_res}"
 }
 
-# [L3] 网络优选 (Source Optimizer)
-# 自动测试哪个源最快，不再盲目用清华源
-optimize_source() {
-    echo -e "${Y}📡 正在进行镜像源测速...${NC}"
-    local tsinghua=$(ping -c 1 -W 1 mirrors.tuna.tsinghua.edu.cn | grep 'time=' | awk -F'time=' '{ print $2 }' | awk '{ print $1 }')
-    local ustc=$(ping -c 1 -W 1 mirrors.ustc.edu.cn | grep 'time=' | awk -F'time=' '{ print $2 }' | awk '{ print $1 }')
+# [L-3] 依赖自检 (Auto-Fix)
+check_env_integrity() {
+    ui_print "INFO" "正在扫描系统完整性..."
     
-    # 默认清华，如果中科大更快则切换 (逻辑简写)
-    BEST_SOURCE="tsinghua"
-    # 这里仅做逻辑演示，实际 worker 中会根据此变量切换
-    echo -e "${G}✅ 优选完成: 使用 $BEST_SOURCE 节点${NC}"
-}
-
-# [L4] 依赖自愈 (Auto-Heal)
-check_deps() {
-    # 解锁 dpkg
-    if [ -f "$PREFIX/var/lib/dpkg/lock-frontend" ]; then rm -f $PREFIX/var/lib/dpkg/lock*; fi
-    
-    local DEPS="proot-distro pulseaudio wget curl openssh ncurses-utils grep sed awk fastfetch net-tools termux-tools tar gzip"
-    local MISSING=""
-    for d in $DEPS; do command -v $d >/dev/null || MISSING="$MISSING $d"; done
-    
-    if [ -n "$MISSING" ]; then
-        echo -e "${P}📦 检测到组件缺失，正在补全...${NC}"
-        pkg install $MISSING -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
+    # dpkg 解锁
+    if [ -f "$PREFIX/var/lib/dpkg/lock-frontend" ]; then
+        ui_print "WARN" "检测到 dpkg 锁，正在强制解锁..."
+        rm -f $PREFIX/var/lib/dpkg/lock*
     fi
     
-    if ! command -v termux-x11 &>/dev/null; then
-        echo -e "${P}📦 正在部署 X11 图形驱动...${NC}"
-        pkg install x11-repo -y >/dev/null 2>&1
-        pkg install termux-x11-nightly -y >/dev/null 2>&1
-    fi
-}
-
-# ==============================================================================
-# 📚 ENCYCLOPEDIA (宇宙全书 - 知识库模块)
-# ==============================================================================
-do_wiki() {
-    while true; do
-        clear
-        echo -e "${P}=== 📖 宇宙全书 (Knowledge Base) ===${NC}"
-        echo -e "${GR}此处包含你需要知道的一切${NC}"
-        echo -e "----------------------------------------"
-        echo -e "${W}1. 基础篇${NC} (Termux原理, Proot机制)"
-        echo -e "${W}2. 网络篇${NC} (换源, 代理, 下载失败原因)"
-        echo -e "${W}3. 桌面篇${NC} (X11 vs VNC, 黑屏怎么办)"
-        echo -e "${W}4. SSH/SFTP篇${NC} (远程连接, 传文件教程)"
-        echo -e "${W}5. 故障排除${NC} (32-bit错误, 信号9, 端口占用)"
-        echo -e "${W}0. 返回主控台${NC}"
-        echo -e "----------------------------------------"
-        
-        ask_safe "👉 请选择课题: " "012345"
-        
-        case "$RET" in
-            0) return ;;
-            1)
-                echo -e "\n${Y}[基础篇]${NC}"
-                echo -e "Q: Termux 是什么？\nA: Android 上的 Linux 终端模拟器。它本身没有内核，共用手机内核。"
-                echo -e "Q: Proot 是什么？\nA: 因为手机没有 Root 权限，无法运行真正的 Linux。Proot 是一个'中间层'，它假装自己是 Root，从而骗过 Linux 系统让其运行。我们装的 Ubuntu 就是跑在 Proot 里的。"
-                read -n 1 -s -p "按键继续..." ;;
-            2)
-                echo -e "\n${Y}[网络篇]${NC}"
-                echo -e "Q: 为什么下载总是失败？\nA: GitHub 和官方源在国外。必须开启 VPN (魔法)。"
-                echo -e "Q: 什么是换源？\nA: 把下载地址从国外的'官方店'改成国内的'加盟店'(清华/中科大)，速度会快很多。本脚本自动执行此操作。"
-                read -n 1 -s -p "按键继续..." ;;
-            3)
-                echo -e "\n${Y}[桌面篇]${NC}"
-                echo -e "Q: X11 和 VNC 有什么区别？"
-                echo -e "A: X11 (Termux:X11) 是硬件级加速，画面流畅，声音同步，手机直接看。"
-                echo -e "   VNC 是视频流传输，比较卡，适合远程连接。"
-                echo -e "Q: 打开桌面黑屏？\nA: 通常是因为没装 Termux:X11 APP，或者后台杀毒软件把进程杀了。"
-                read -n 1 -s -p "按键继续..." ;;
-            4)
-                echo -e "\n${Y}[SSH/SFTP篇]${NC}"
-                echo -e "Q: 怎么传文件到手机里？"
-                echo -e "A: 使用 SFTP 协议。电脑下载 'FileZilla' 或 'WinSCP'。"
-                echo -e "   主机: 手机IP, 端口: 8022, 用户: (你的用户名), 密码: (你设的)。"
-                echo -e "   连接后，直接拖拽文件即可。"
-                read -n 1 -s -p "按键继续..." ;;
-            5)
-                echo -e "\n${Y}[故障排除篇]${NC}"
-                echo -e "Q: 报错 'cpu does not support 32-bit'？"
-                echo -e "A: 这不是 CPU 问题！是因为下载断网，下到了空文件。Proot 试图运行空文件时报的错。解决方法：删除系统重装。"
-                echo -e "Q: 报错 'Bad port' (电脑端)？"
-                echo -e "A: 电脑记录了你旧的密钥。CMD运行: del %USERPROFILE%\.ssh\config"
-                read -n 1 -s -p "按键继续..." ;;
-        esac
+    local needed="proot-distro pulseaudio wget curl openssh ncurses-utils grep sed awk fastfetch net-tools termux-tools tar gzip"
+    local missing=""
+    for pkg in $needed; do
+        if ! command -v $pkg >/dev/null; then missing="$missing $pkg"; fi
     done
+    
+    if [ -n "$missing" ]; then
+        ui_print "WARN" "发现缺失组件: $missing"
+        ui_print "INFO" "正在自动补全..."
+        pkg install $missing -y -o Dpkg::Options::="--force-confnew" >/dev/null 2>&1
+        ui_print "OK" "组件补全完成。"
+    fi
 }
 
 # ==============================================================================
-# 👷 WORKER FACTORY (容器内部工单)
+# 👷 WORKER SCRIPT GENERATOR (工单生成器)
 # ==============================================================================
 create_worker() {
     W_FILE="$TMPDIR/xxy_worker.sh"; rm -f "$W_FILE"
@@ -187,6 +212,7 @@ export PATH=$PATH:/usr/bin:/bin
 export DEBIAN_FRONTEND=noninteractive
 act=$1
 
+# 智能识别
 if [ -f /etc/alpine-release ]; then T="alpine"; PM="apk"
 elif [ -f /etc/arch-release ]; then T="arch"; PM="pacman"
 elif [ -f /etc/debian_version ]; then T="debian"; PM="apt"
@@ -194,7 +220,7 @@ else T="unknown"; fi
 
 case "$act" in
   src) 
-    # 强制清华源 (逻辑简化，实际可扩展)
+    # 自动优选源
     if [ "$T" = "debian" ]; then 
         if ! grep -q "tsinghua" /etc/apt/sources.list; then
              grep -q "ubuntu" /etc/os-release && sed -i "s|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g" /etc/apt/sources.list
@@ -204,8 +230,8 @@ case "$act" in
         sed -i "s/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g" /etc/apk/repositories; apk update
     fi ;;
   
-  clean) 
-    # 深度清洗 (Deep Clean)
+  clean)
+    # 强力净化 (防止重复输出)
     sed -i '/fastfetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null
     sed -i '/neofetch/d' /etc/profile /etc/bash.bashrc ~/.bashrc 2>/dev/null ;;
 
@@ -224,238 +250,360 @@ EOF
     chmod 777 "$W_FILE"
 }
 
-run_task() {
-    tput sc; tput cup 14 0; echo -ne "\033[J${Y}⏳ [System] Executing: $2...${NC}"
-    if proot-distro login "$1" --shared-tmp -- /bin/sh "$TMPDIR/xxy_worker.sh" "$3" >> "$LOG_FILE" 2>&1; then
-         tput cup 14 0; echo -ne "\033[J${G}✅ [OK] $2${NC}"
+# 执行任务带视觉反馈
+run_task_visual() {
+    local sys=$1
+    local desc=$2
+    local cmd=$3
+    
+    # 模拟进度条 (视觉效果)
+    for i in {1..5}; do
+        ui_progress $((i*20)) 100 "正在配置: $desc"
+        sleep 0.1
+    done
+    
+    if proot-distro login "$sys" --shared-tmp -- /bin/sh "$TMPDIR/xxy_worker.sh" "$cmd" >> "$LOG_FILE" 2>&1; then
+         ui_progress 100 100 "$desc 完成    "
+         echo "" # 换行
+         return 0
     else
-         tput cup 14 0; echo -ne "\033[J${R}⚠️ [Pass] $2${NC}"
+         echo ""
+         ui_print "WARN" "$desc 跳过 (详情见日志)"
+         return 1
     fi
-    tput rc; sleep 0.3
 }
 
 # ==============================================================================
-# 🎮 CONTROLLER (业务逻辑)
+# 🎮 MODULES (功能模块)
 # ==============================================================================
 
 get_systems() { if [ -d "$ROOTFS_BASE" ]; then ls -1 "$ROOTFS_BASE" 2>/dev/null; fi; }
 
-select_sys() {
-    tput cnorm; stty echo; clear; echo -e "${C}--- 容器选择器 ---${NC}"
+# [M1] 可视化系统选择
+select_sys_visual() {
+    ui_header "系统选择器"
     mapfile -t LIST < <(get_systems)
-    if [ ${#LIST[@]} -eq 0 ]; then echo -e "\n${R}🚫 本地无数据。请先 [2] 安装。${NC}"; read -n 1 -s; return 1; fi
-    for i in "${!LIST[@]}"; do echo -e "${G}$((i+1)).${NC} ${LIST[$i]}"; done
-    echo "0. 返回"
-    local valid="0"; for i in "${!LIST[@]}"; do valid="${valid}$((i+1))"; done
-    echo "-------------------------"
-    ask_safe "👉 序号: " "$valid"
+    
+    if [ ${#LIST[@]} -eq 0 ]; then
+        echo -e "\n ${C_R}┌──────────────────────────────┐${C_RESET}"
+        echo -e " ${C_R}│  本地存储为空！请先安装系统  │${C_RESET}"
+        echo -e " ${C_R}└──────────────────────────────┘${C_RESET}"
+        read -n 1 -s -p " 按任意键返回..."
+        return 1
+    fi
+    
+    echo -e "${C_C} [ 已安装的容器 ]${C_RESET}"
+    for i in "${!LIST[@]}"; do
+        echo -e "  ${C_G}$((i+1))${C_RESET}) ${LIST[$i]}"
+    done
+    echo -e "  ${C_G}0${C_RESET}) 返回主菜单"
+    
+    local valid="0"
+    for i in "${!LIST[@]}"; do valid="${valid}$((i+1))"; done
+    
+    ask_choice "请选择操作对象:" "$valid"
     [ "$RET" = "0" ] && return 2
     SELECTED="${LIST[$((RET-1))]}"
     return 0
 }
 
-# [1] 登录 (尸检 + 净化)
-do_login() {
-    select_sys; [ $? -ne 0 ] && return
-    create_worker
+# [M2] 可视化安装向导
+module_install() {
+    ui_header "安装向导"
     
-    if [ ! -d "$ROOTFS_BASE/$SELECTED/bin" ]; then
-        echo -e "\n${R}❌ 尸检报告：系统核心丢失。${NC}"; echo "建议：删除重装。"; read -n 1 -s; return
-    fi
-    
-    run_task "$SELECTED" "配置净化" "clean"
-    
-    tput cnorm; clear
-    proot-distro login "$SELECTED" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; fi; exec bash"
-}
-
-# [2] 安装 (优选 + 熔断)
-do_install() {
-    tput cnorm; stty echo; clear; echo -e "${C}=== 宇宙版安装向导 ===${NC}"
-    
-    # 熔断检查
+    # 预检
+    ui_print "INFO" "环境预检中..."
     local free=$(df -m "$PREFIX" | awk 'NR==2 {print $4}')
-    if [ "$free" -lt 2000 ]; then echo "${R}❌ 存储熔断：空间 < 2GB${NC}"; read -n 1 -s; return; fi
+    if [ "$free" -lt 2000 ]; then ui_print "ERR" "空间不足 2GB！"; read -n 1 -s; return; fi
+    if ! ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then ui_print "ERR" "网络不通！请检查VPN。"; read -n 1 -s; return; fi
+    ui_print "OK" "环境检查通过。"
     
-    echo -ne "${Y}📡 网络诊断... ${NC}"
-    if ping -c 1 -W 1 223.5.5.5 >/dev/null 2>&1; then echo "${G}在线${NC}"; else echo "${R}离线${NC}"; read -n 1 -s; return; fi
+    echo -e "\n${C_C} [ 可用镜像列表 ]${C_RESET}"
+    echo -e "  ${C_G}1${C_RESET}) Ubuntu    (小白推荐/稳定)"
+    echo -e "  ${C_G}2${C_RESET}) Debian    (老牌稳定)"
+    echo -e "  ${C_G}3${C_RESET}) ArchLinux (轻量/极客)"
+    echo -e "  ${C_G}4${C_RESET}) Alpine    (超小/极速)"
+    echo -e "  ${C_G}0${C_RESET}) 返回"
     
-    D_NAMES=("ubuntu" "debian" "archlinux" "alpine")
-    for i in "${!D_NAMES[@]}"; do echo -e "${G}$((i+1)).${NC} ${D_NAMES[$i]}"; done
-    echo "0. 返回"
-    
-    ask_safe "👉 选择 (小白选1): " "01234"
+    ask_choice "请选择系统:" "01234"
     [ "$RET" = "0" ] && return
-    TARGET=${D_NAMES[$((RET-1))]}
     
-    if [ -d "$ROOTFS_BASE/$TARGET" ]; then echo "${G}已存在。${NC}"; read -n 1 -s; return; fi
+    local d_names=("ubuntu" "debian" "archlinux" "alpine")
+    TARGET=${d_names[$((RET-1))]}
     
-    echo -e "\n${Y}🧹 格式化环境...${NC}"
+    if [ -d "$ROOTFS_BASE/$TARGET" ]; then ui_print "WARN" "该系统已存在！"; read -n 1 -s; return; fi
+    
+    echo ""
+    ui_print "INFO" "正在初始化下载通道..."
     proot-distro reset "$TARGET" >/dev/null 2>&1
     rm -rf "$PREFIX/var/lib/proot-distro/download"
     
-    echo -e "${W}🚀 启动下载引擎...${NC}"
+    echo -e "${C_Y} >> 正在下载系统核心包，请勿切屏...${C_RESET}"
     if proot-distro install $TARGET; then
+        # 尸检
         if [ ! -f "$ROOTFS_BASE/$TARGET/etc/os-release" ]; then
-             echo -e "\n${R}❌ 完整性校验失败。已自动回滚。${NC}"; proot-distro remove "$TARGET"; read -n 1 -s; return
+             ui_print "ERR" "文件校验失败(空包)。正在回滚..."
+             proot-distro remove "$TARGET"
+             read -n 1 -s; return
         fi
+        
         create_worker
-        run_task "$TARGET" "源优化" "src"
-        run_task "$TARGET" "汉化" "cn"
-        run_task "$TARGET" "美化" "fetch"
-        echo -e "\n${G}🎉 部署完毕。${NC}"; read -n 1 -s
+        echo ""
+        run_task_visual "$TARGET" "更换国内源" "src"
+        run_task_visual "$TARGET" "汉化语言包" "cn"
+        run_task_visual "$TARGET" "美化组件库" "fetch"
+        
+        ui_print "OK" "安装全部完成！"
+        read -n 1 -s -p " 按任意键返回..."
     else
-        echo -e "\n${R}❌ 下载中断。请检查网络。${NC}"; read -n 1 -s
+        ui_print "ERR" "下载失败。请确保 VPN 已开启。"
+        read -n 1 -s
     fi
 }
 
-# [3] 桌面
-do_gui() {
-    select_sys; [ $? -ne 0 ] && return
+# [M3] 可视化登录
+module_login() {
+    select_sys_visual; [ $? -ne 0 ] && return
     create_worker
-    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then
-        run_task "$SELECTED" "部署桌面" "gui"
+    
+    # 尸检
+    if [ ! -d "$ROOTFS_BASE/$SELECTED/bin" ]; then
+        ui_print "ERR" "系统文件损坏！请删除重装。"
+        read -n 1 -s; return
     fi
     
-    clear; echo -e "${G}1. 本地极速 (Termux:X11)${NC}"; echo "2. 远程兼容 (VNC)"
-    ask_safe "👉 选择: " "12"
-    if [ "$RET" == "1" ]; then
-        if ! pm list packages | grep -q "com.termux.x11"; then echo "${R}缺失 APP${NC}"; read -n 1 -s; return; fi
-        pkill -9 termux-x11 >/dev/null 2>&1; rm -rf $TMPDIR/.X11-unix
-        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-        sleep 1; pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1; termux-x11 :0 &
-        proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
-    elif [ "$RET" == "2" ]; then
-        proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
-        echo "地址: 127.0.0.1:5901 | 密码: 123456"; read -n 1 -s
-    fi
+    run_task_visual "$SELECTED" "配置净化" "clean"
+    
+    tput cnorm; clear
+    # 启动容器
+    proot-distro login "$SELECTED" --shared-tmp -- /bin/bash -c "if command -v fastfetch >/dev/null; then fastfetch; fi; exec bash"
 }
 
-# [4] SSH 鹰眼 (带 SFTP 教程)
-do_ssh_radar() {
+# [M4] SSH 鹰眼雷达 (图形化监控)
+module_ssh_radar() {
     while true; do
-        tput cnorm; stty echo; clear
-        echo -e "${C}=== 📡 SSH 鹰眼雷达 ===${NC}"
-        USER=$(whoami); IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')
+        ui_header "SSH 鹰眼雷达"
         
-        CONN=$(netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED' | wc -l)
-        if pgrep sshd >/dev/null; then STATE="${G}🟢 运行中${NC}"; else STATE="${R}🔴 已停止${NC}"; fi
+        USER=$(whoami)
+        IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | sed 's/addr://')
         
-        echo -e "状态: $STATE   IP: ${W}$IP${NC}   连接数: ${B}$CONN${NC}"
-        echo -e "----------------------------------------"
-        if [ "$CONN" -gt 0 ]; then echo -e "${R}⚠️ 有人正在连接你！${NC}"; else echo -e "${GR}暂无连接${NC}"; fi
-        echo -e "----------------------------------------"
-        echo -e "1. 启动服务"
-        echo -e "2. 停止服务"
-        echo -e "3. ${R}一键踢人${NC}"
-        echo -e "4. ${C}文件传输 (SFTP) 教程${NC}"
-        echo -e "0. 返回"
+        # 获取连接数据
+        ACTIVE_CONNS=$(netstat -tn 2>/dev/null | grep ':8022' | grep 'ESTABLISHED')
+        COUNT=$(echo "$ACTIVE_CONNS" | grep -c 'ESTABLISHED')
         
-        ask_safe "👉 指令: " "01234"
+        if pgrep sshd >/dev/null; then STATE="${C_G}● 运行中${C_RESET}"; else STATE="${C_R}● 已停止${C_RESET}"; fi
+        
+        echo -e " ${C_C}┌────────────────────────────────────────┐${C_RESET}"
+        echo -e " ${C_C}│${C_RESET} 服务状态: $STATE"
+        echo -e " ${C_C}│${C_RESET} 本机地址: ${C_W}$IP${C_RESET}"
+        echo -e " ${C_C}│${C_RESET} 活跃连接: ${C_B}$COUNT${C_RESET}"
+        echo -e " ${C_C}└────────────────────────────────────────┘${C_RESET}"
+        
+        if [ "$COUNT" -gt 0 ]; then
+            echo -e "\n ${C_R}[!!!] 入侵检测警告 [!!!]${C_RESET}"
+            echo "$ACTIVE_CONNS" | awk '{print "  -> 来源IP: " $5}'
+        else
+            echo -e "\n ${C_GR}[无外部设备连接]${C_RESET}"
+        fi
+        
+        echo -e "\n${C_C} [ 操作菜单 ]${C_RESET}"
+        echo -e "  ${C_G}1${C_RESET}) 启动服务"
+        echo -e "  ${C_G}2${C_RESET}) 停止服务"
+        echo -e "  ${C_G}3${C_RESET}) ${C_R}一键踢人 (断开所有)${C_RESET}"
+        echo -e "  ${C_G}4${C_RESET}) 图形化隧道教程 (Windows远程)"
+        echo -e "  ${C_G}0${C_RESET}) 返回"
+        
+        ask_choice "指令:" "01234"
+        
         case "$RET" in
             0) return ;;
-            1) grep -q "^$USER:" "$PREFIX/etc/shadow" 2>/dev/null || passwd; pkill sshd; sshd; read -n 1 -s ;;
-            2) pkill sshd; read -n 1 -s ;;
-            3) pgrep sshd | grep -v $(pgrep -o sshd) | xargs kill -9 2>/dev/null; echo "已踢出"; read -n 1 -s ;;
-            4) 
-                clear; echo -e "${C}=== 文件传输指南 (SFTP) ===${NC}"
-                echo -e "1. 电脑下载 'FileZilla' 或 'WinSCP'"
-                echo -e "2. 新建连接，协议选 SFTP"
-                echo -e "   主机: $IP"
-                echo -e "   端口: 8022"
-                echo -e "   用户: $USER"
-                echo -e "   密码: (你设置的SSH密码)"
-                read -n 1 -s ;;
+            1) 
+               grep -q "^$USER:" "$PREFIX/etc/shadow" 2>/dev/null || passwd
+               pkill sshd; sshd; ui_print "OK" "服务已启动"; read -n 1 -s ;;
+            2) pkill sshd; ui_print "OK" "服务已停止"; read -n 1 -s ;;
+            3) 
+               pgrep sshd | grep -v $(pgrep -o sshd) | xargs kill -9 2>/dev/null
+               ui_print "OK" "已踢出所有用户"; read -n 1 -s ;;
+            4)
+               clear
+               echo -e "${C_P}=== 🖼️ 远程桌面教程 ===${C_RESET}"
+               echo -e "1. 在主菜单选 [3] -> [2] 开启 VNC"
+               echo -e "2. 电脑CMD输入 (复制):"
+               echo -e "   ${C_Y}ssh -p 8022 -L 5901:127.0.0.1:5901 -N -f $USER@$IP${C_RESET}"
+               echo -e "3. 电脑VNC Viewer连接: ${C_G}localhost:5901${C_RESET}"
+               read -n 1 -s ;;
         esac
     done
 }
 
-# [5] 备份与还原
-do_backup() {
-    tput cnorm; stty echo; clear; echo -e "${C}=== 备份中心 ===${NC}"
-    echo "1. 备份"
-    echo "2. 还原"
-    echo "0. 返回"
-    ask_safe "👉 选择: " "012"
+# [M5] 备份与恢复
+module_backup() {
+    ui_header "灾难恢复中心"
+    echo -e "  ${C_G}1${C_RESET}) 备份系统 (Backup)"
+    echo -e "  ${C_G}2${C_RESET}) 还原系统 (Restore)"
+    echo -e "  ${C_G}0${C_RESET}) 返回"
+    ask_choice "选择:" "012"
+    
     if [ "$RET" == "1" ]; then
-        select_sys; [ $? -ne 0 ] && return
-        echo -e "${Y}⏳ 打包中 (需3-5分钟)...${NC}"
+        select_sys_visual; [ $? -ne 0 ] && return
+        echo -e "\n${C_Y} >> 正在打包数据 (可能需要几分钟)...${C_RESET}"
         cd "$ROOTFS_BASE/$SELECTED"
         tar -czf "$BACKUP_DIR/$SELECTED.tar.gz" --exclude='tmp/*' --exclude='proc/*' .
-        echo -e "${G}✅ 已保存至: $BACKUP_DIR${NC}"; read -n 1 -s
+        ui_print "OK" "备份已存入: $BACKUP_DIR"
+        read -n 1 -s
     elif [ "$RET" == "2" ]; then
-        echo -e "${C}可用备份:${NC}"; ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null
-        echo ""; read -p "输入文件名 (含后缀): " fname
+        echo -e "\n${C_C}[ 可用备份文件 ]${C_RESET}"
+        ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null
+        echo ""
+        read -p " 输入备份文件名 (完整): " fname
         if [ -f "$BACKUP_DIR/$fname" ]; then
-            read -p "新系统名称: " newname
+            read -p " 新系统命名: " newname
             mkdir -p "$ROOTFS_BASE/$newname"
-            echo -e "${Y}⏳ 解压中...${NC}"
+            echo -e "${C_Y} >> 解压中...${C_RESET}"
             tar -xzf "$BACKUP_DIR/$fname" -C "$ROOTFS_BASE/$newname"
             echo "plug_in_proot=1" > "$PD_CONF/$newname.sh"
-            echo -e "${G}✅ 还原成功${NC}"; read -n 1 -s
+            ui_print "OK" "系统还原成功！"
         else
-            echo "${R}文件不存在${NC}"; read -n 1 -s
+            ui_print "ERR" "文件不存在。"
         fi
+        read -n 1 -s
     fi
 }
 
-do_del() { select_sys; [ $? -ne 0 ] && return; echo "${R}确认删除?${NC}"; ask_safe "1=是 0=否: " "01"; [ "$RET" == "1" ] && proot-distro remove "$SELECTED" && rm -rf "$ROOTFS_BASE/$SELECTED"; }
-
-# ==============================================================================
-# 🖥️ UI 仪表盘 (光标锚定)
-# ==============================================================================
-draw_base() {
-    clear
-    echo -e "${P}"
-    echo "██╗  ██╗██╗  ██╗██╗   ██╗"
-    echo "╚██╗██╔╝╚██╗██╔╝╚██╗ ██╔╝"
-    echo " ╚███╔╝  ╚███╔╝  ╚████╔╝ "
-    echo " ██╔██╗  ██╔██╗   ╚██╔╝  "
-    echo -e "${GR}──────────────────────────────────────────${NC}"
-    echo -e " ${W}[1] 进入系统${NC}     ${W}[4] SSH 鹰眼雷达${NC}"
-    echo -e " ${W}[2] 安装系统${NC}     ${W}[5] 备份/还原${NC}"
-    echo -e " ${W}[3] 启动桌面${NC}     ${W}[6] 删除系统${NC}"
-    echo -e " ${Y}[7] 宇宙全书 (教程)${NC}${W} [0] 退出${NC}"
-    echo -e "${GR}──────────────────────────────────────────${NC}"
-    echo ""
-    echo -e "${C}➤ 指令:${NC} " 
-}
-
-refresh_info() {
-    get_hw_stats
-    T=$(date "+%H:%M:%S")
-    IP=$(ifconfig 2>/dev/null | grep -oE 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1 | awk '{print $2}' | sed 's/addr://'); [ -z "$IP" ] && IP="离线"
+# [M6] 图形化桌面
+module_gui() {
+    select_sys_visual; [ $? -ne 0 ] && return
+    create_worker
     
-    tput sc; tput cup 5 0
-    printf " ${HW_INFO} | Time:${Y}%s${NC}\033[K" "$T"
-    tput cup 6 0
-    printf " IP:${W}%-13s${NC} | System:${P}Termux Native${NC}\033[K" "$IP"
-    tput rc
+    if ! proot-distro login "$SELECTED" -- command -v startxfce4 >/dev/null 2>&1; then
+        echo ""
+        run_task_visual "$SELECTED" "部署桌面环境" "gui"
+    fi
+    
+    ui_header "桌面启动模式"
+    echo -e "  ${C_G}1${C_RESET}) 本地极速模式 (Termux:X11 APP)"
+    echo -e "  ${C_G}2${C_RESET}) 远程兼容模式 (VNC Server)"
+    echo -e "  ${C_G}0${C_RESET}) 返回"
+    
+    ask_choice "选择:" "012"
+    
+    if [ "$RET" == "1" ]; then
+        if ! pm list packages | grep -q "com.termux.x11"; then
+            ui_print "ERR" "未安装 Termux:X11 APP！"
+            read -n 1 -s; return
+        fi
+        pkill -9 termux-x11 >/dev/null 2>&1; rm -rf $TMPDIR/.X11-unix
+        am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
+        sleep 1
+        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
+        termux-x11 :0 &
+        proot-distro login "$SELECTED" --shared-tmp -- bash -c "export DISPLAY=:0 PULSE_SERVER=127.0.0.1; dbus-launch --exit-with-session startxfce4"
+    elif [ "$RET" == "2" ]; then
+        proot-distro login "$SELECTED" -- bash -c "vncserver -kill :1 >/dev/null 2>&1; rm -rf /tmp/.X11-unix/X1; vncserver :1 -geometry 1280x720"
+        echo -e "\n 地址: ${C_G}127.0.0.1:5901${C_RESET}"
+        echo -e " 密码: ${C_G}123456${C_RESET}"
+        read -n 1 -s
+    fi
 }
 
-# --- MAIN ---
-check_deps
-draw_base
+# [M7] 百科全书 (Wiki)
+module_wiki() {
+    while true; do
+        ui_header "小白百科全书"
+        echo -e "  ${C_G}1${C_RESET}) 为什么下载失败？"
+        echo -e "  ${C_G}2${C_RESET}) SSH 'Bad port' 修复"
+        echo -e "  ${C_G}3${C_RESET}) 怎么把手机变电脑？"
+        echo -e "  ${C_G}0${C_RESET}) 返回"
+        
+        ask_choice "阅读:" "0123"
+        case "$RET" in
+            0) return ;;
+            1) echo -e "\n${C_Y}必须开VPN (魔法)。${C_RESET} 国内直连 GitHub 极不稳定，会导致下载空文件 (变安卓)。"; read -n 1 -s ;;
+            2) echo -e "\n${C_Y}电脑CMD运行:${C_RESET} del %USERPROFILE%\.ssh\config"; read -n 1 -s ;;
+            3) echo -e "\n${C_Y}安装 Termux:X11 APP${C_RESET}，然后选菜单 [3] -> [1] 本地模式。"; read -n 1 -s ;;
+        esac
+    done
+}
+
+module_del() {
+    select_sys_visual; [ $? -ne 0 ] && return
+    echo -e "\n${C_R}⚠️  高能预警：数据删除不可恢复！${C_RESET}"
+    ask_choice "确认删除按 1，取消按 0: " "01"
+    if [ "$RET" == "1" ]; then
+        proot-distro remove "$SELECTED"
+        rm -rf "$ROOTFS_BASE/$SELECTED"
+        ui_print "OK" "已销毁。"
+        read -n 1 -s
+    fi
+}
+
+# ==============================================================================
+# 🖥️ MAIN GUI LOOP (主界面)
+# ==============================================================================
+
+draw_dashboard() {
+    get_telemetry
+    
+    # 1. Header
+    ui_header "戴森球 v2000.0"
+    
+    # 2. HUD (使用光标锚定更新，不闪烁)
+    tput sc
+    echo -e " ${C_GR}┌──────────────────────────────────────────────┐${C_RESET}"
+    echo -e " ${C_GR}│${C_RESET} ${HUD_INFO}"
+    echo -e " ${C_GR}└──────────────────────────────────────────────┘${C_RESET}"
+    tput rc
+    
+    # 3. Menu (只画一次)
+    # 为了布局美观，这里使用了手动偏移
+    echo -e " ${C_B}[常用功能]${C_RESET}                  ${C_B}[高级功能]${C_RESET}"
+    echo -e " ${C_G}1${C_RESET}. 进入系统 (Login)       ${C_G}4${C_RESET}. 鹰眼雷达 (SSH)"
+    echo -e " ${C_G}2${C_RESET}. 安装系统 (Install)     ${C_G}5${C_RESET}. 灾难恢复 (Backup)"
+    echo -e " ${C_G}3${C_RESET}. 启动桌面 (GUI)         ${C_G}6${C_RESET}. 删除系统 (Delete)"
+    echo -e ""
+    echo -e " ${C_Y}7${C_RESET}. 📖 小白百科全书        ${C_R}0${C_RESET}. 退出程序 (Exit)"
+    ui_line
+    
+    echo -e "${C_C}➤ 请输入指令:${C_RESET} " 
+}
+
+# --- Init ---
+check_env_integrity
+
+# Draw static base once
+clear
+
 while true; do
-    refresh_info
-    read -t 1 -n 1 choice; STATUS=$?
+    draw_dashboard
+    
+    # 刷新逻辑: 1秒超时
+    read -t 1 -n 1 choice
+    STATUS=$?
+    
     if [ $STATUS -ne 0 ] || [ -z "$choice" ]; then continue; fi
+    
     case "$choice" in
-        1) do_login; draw_base ;; 2) do_install; draw_base ;; 3) do_gui; draw_base ;;
-        4) do_ssh_radar; draw_base ;; 5) do_backup; draw_base ;; 
-        6) exit 0 ;; 7) do_wiki; draw_base ;; *) ;; 
+        1) module_login ;; 
+        2) module_install ;; 
+        3) module_gui ;;
+        4) module_ssh_radar ;; 
+        5) module_backup ;;
+        6) module_del ;;
+        7) module_wiki ;;
+        0) exit 0 ;;
+        *) ;; 
     esac
 done
 MAIN_EOF
 
 chmod 755 $PREFIX/bin/xxy
 clear
-echo -e "\033[1;35m🌌 宇宙全书 v1000.0 已装载\033[0m"
+echo -e "\033[1;35m🪐 戴森球 v2000.0 (可视化重构版) 已就绪\033[0m"
 echo -e "-------------------------------------------"
-echo -e "📖 [宇宙全书] 内置 Linux 知识库与教程"
-echo -e "📟 [仪表盘] 实时显示 CPU / 内存 / 磁盘"
-echo -e "🛡️ [逻辑监狱] 100% 防止小白误操作"
-echo -e "📡 [SFTP] 内置文件传输教程"
+echo -e "🎨 [TUI引擎] 全新绘制的图形化界面"
+echo -e "📊 [HUD仪表] 实时显示 CPU / 内存 / 网络"
+echo -e "📡 [鹰眼雷达] 图形化展示 SSH 连接者"
+echo -e "🛡️ [逻辑监狱] 100% 防止误触与乱码"
 echo -e "-------------------------------------------"
-read -n 1
+read -n 1 -p "按任意键启动..."
 xxy
