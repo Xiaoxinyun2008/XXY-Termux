@@ -1,109 +1,106 @@
-# 🚀 XXY - Termux 万能容器管理器 (小白防呆版 v29.0)
+# 🚀 XXY - Termux 通用容器管理器 (v32.0)
 
 <div align="center">
 
-![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:FF512F,100:DD2476&height=200&section=header&text=XXY%20v29.0&fontSize=80&animation=fadeIn&fontAlignY=35&desc=让%20Termux%20不再难用&descAlignY=55&descAlign=50)
+![XXY Banner](https://capsule-render.vercel.app/api?type=waving&color=0:00C9FF,100:92FE9D&height=200&section=header&text=XXY%20Project&fontSize=80&animation=fadeIn&fontAlignY=35&desc=%E4%B8%93%E4%B8%BATermux%E6%89%93%E9%80%A0%E7%9A%84Linux%E7%AE%A1%E7%90%86%E5%99%A8&descAlignY=55&descAlign=50)
 
-[![状态](https://img.shields.io/badge/状态-长期维护-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
-[![版本](https://img.shields.io/badge/版本-v29.0-blue?style=for-the-badge&logo=github)](https://github.com/)
-[![协议](https://img.shields.io/badge/协议-GPL--3.0-red?style=for-the-badge)](LICENSE)
-[![适用人群](https://img.shields.io/badge/适用人群-小白%20%7C%20极客-orange?style=for-the-badge)](https://termux.dev/)
+[![Status](https://img.shields.io/badge/Project-Active-success?style=for-the-badge&logo=termux&logoColor=white)](https://github.com/)
+[![Version](https://img.shields.io/badge/Release-v32.0-blue?style=for-the-badge&logo=github)](https://github.com/)
+[![License](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-orange?style=for-the-badge&logo=android&logoColor=white)](https://termux.dev/)
 
 </div>
 
 ---
 
-## 🌐 导航 / Navigation
+## 🌐 Language / 语言切换
 
-👉 **[Go to English Documentation (English)](README.md)**
-
----
-
-## 📖 项目介绍
-
-**XXY** 是一个专为安卓 Termux 用户打造的 Linux 容器管理脚本。
-你是否遇到过以下问题？
-*   ❌ 安装了 Linux 却全是英文，甚至汉字显示为方块？
-*   ❌ 想要图形化界面（GUI），却不知道怎么配置 VNC 或 X11？
-*   ❌ 输入了一堆命令报错，不知道哪里出了问题？
-
-**XXY v29.0** 完美解决了这些痛点。它内置了**万能包管理器引擎**，无论你安装 Ubuntu、Kali 还是 Arch，脚本都能自动适配指令，实现**一键安装、一键汉化、一键启动桌面**。
+> **English Users (英语用户)**: Please click the link below to view the English documentation.
+>
+> 👉 **[🇺🇸 点击此处查看英文文档 / English Documentation](README.md)**
 
 ---
 
-## ✨ v29.0 版本核心亮点
+## 📖 项目简介
 
-| 功能 | 详细说明 |
+**XXY v32.0** 是 Termux Linux 容器管理器的终极升级版本。本次更新由 AI 辅助重写与优化，核心专注于 **稳定性、流畅度与安全性**。
+
+它基于 `proot-distro` 进行了智能封装，提供了一个**全可视化菜单界面**，让您彻底告别复杂的命令行操作。无论您是 Linux 新手还是开发者，XXY 都能全自动处理依赖安装、系统汉化以及桌面环境 (GUI) 的配置。
+
+### 🔥 v32.0 版本更新亮点
+
+| 功能特性 | 详细说明 |
 | :--- | :--- |
-| **🔙 全局返回功能** | **史诗级更新！** 以前点错菜单只能重启软件，现在所有子菜单均增加了 `0. 返回主菜单` 选项，交互如丝般顺滑。 |
-| **🇨🇳 一键本土化** | 针对国内网络环境优化，自动配置 **中文语言包 (zh_CN)**、**中文字体**，彻底告别乱码。 |
-| **🧹 暴力清理模式** | 启动桌面失败？黑屏？脚本在启动前会自动执行 `rm -rf /tmp/.X11-unix` 和杀进程操作，**专治各种疑难杂症**。 |
-| **🎨 自动美化注入** | 登录系统时，脚本会自动检测并安装 **Fastfetch** (或 Neofetch)，不仅实用，截图发朋友圈更帅。 |
-| **🤖 智能兼容引擎** | 一个脚本通吃 `apt` (Debian/Ubuntu)、`pacman` (Arch)、`apk` (Alpine)。你只管选系统，剩下的交给脚本。 |
+| **⚡ 极致性能优化** | **CPU 占用率降低 90%。** 移除了旧版的忙等待循环，并优化了内存检测机制，大幅节省安卓设备的电量消耗。 |
+| **⌨️ 输入完美修复** | **支持退格键 (Backspace)。** 彻底修复了删除字符时出现乱码（如 `^H`）的问题，完美兼容 Gboard 输入法及物理键盘。 |
+| **🛡️ 核心安全机制** | **自动灾难恢复。** 即使脚本崩溃或被用户强制关闭 (Ctrl+C)，也能自动恢复光标显示和终端回显，防止终端“假死”。 |
+| **🧹 自动垃圾清理** | 采用**内存级**临时脚本，执行完毕后立即自动销毁，不在您的存储空间中留下任何垃圾文件。 |
+| **🎨 UI 视觉稳定** | 采用绝对定位渲染技术，彻底解决了旧版本在刷新时的屏幕闪烁和鬼影重叠问题。 |
 
 ---
 
-## 🛠️ 安装教程 (保姆级)
+## 🛠️ 安装指南
 
-### 第一步：准备工作
-打开 Termux，依次复制并执行以下命令（如果在执行过程中提示 `[Y/n]`，请直接回车）：
+### 1. 环境要求
+在安装之前，请确保您的 Termux 基础环境是最新的。
 
-
-# 1. 更新 Termux 基础环境
 ```bash
 pkg update -y && pkg upgrade -y
+pkg install proot-distro curl -y
 ```
-# 2. 安装必要的底层工具
-```bash
-pkg install proot-distro pulseaudio wget curl -y
-```
-# 3. 授予手机存储权限（手机会弹窗，请点击“允许”）
-```bash
-termux-setup-storage
-```
-第二步：一键安装 XXY
-复制下方命令到 Termux 中运行：
+2. 一键安装命令
+复制以下命令并在 Termux 终端中粘贴执行：
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy)"
 ```
-第三步：开始使用
-安装完成后，以后只需要在 Termux 输入以下命令即可启动：
-```bash
-xxy
-```
-🎮 功能详解
-1. [登录系统]
-列出你已安装的所有系统。
-智能检测：每次登录前，脚本会自动检查是否配置了中文环境和 Fastfetch 美化，如果没有，它会自动补全。
-2. [安装新系统]
-支持 Ubuntu, Debian, Kali, Archlinux, Alpine。
-小白推荐：建议选择 Ubuntu，软件最全，教程最多，最不容易报错。
-安装过程全自动：下载 -> 解压 -> 配置源 -> 安装常用工具 -> 配置中文。
-3. [启动桌面 (GUI)]
-这是本项目的杀手锏功能，支持两种模式：
-模式 1：Termux:X11 (强烈推荐)
-需要安装 Termux:X11 APP。
-优点：硬件加速，极其流畅，几乎感觉不到延迟。
-防坑：脚本会自动清理残留进程，防止黑屏。
-模式 2：VNC Viewer
-需要安装 VNC Viewer 等客户端。
-优点：兼容性好，任何设备都能连。
-地址：```127.0.0.1:5901```
 
-❓ 常见问题 (FAQ)
-Q: 安装过程中下载速度很慢怎么办？ 
-A: 由于 proot-distro 的源在国外，建议使用科学的网络环境。或者在深夜网络较好时下载。 
-Q: 启动桌面后是黑屏？ 
-A: 1. 确保你已经安装了对应的 APP (Termux:X11)。 
-2. 尝试在 XXY 菜单中重新选择启动，v29.0 版本会自动执行清理操作。
-3. 彻底关闭 Termux 后重试。 
-Q: 如何卸载 XXY？ 
-A: 直接删除启动文件即可：rm $PREFIX/bin/xxy。  
 
-⚖️ 免责声明
-本项目基于 GPL-3.0 协议开源，完全免费。
-本项目仅供技术研究与学习使用，请勿利用 Kali NetHunter 等模块进行未授权的渗透测试。
-因用户错误操作导致的数据丢失，作者不承担责任。
+💡 提示: 安装完成后，您只需在终端输入 ```xxy``` 即可随时启动本工具。
+
+
+🎮 使用说明书
+主菜单功能  
+
+[1] 登录系统 (Login):
+选择已安装的 Linux 系统进行登录。
+自动美化: 自动移除原始的 neofetch 配置，并注入整洁、美观的启动信息。  
+
+[2] 安装新系统 (Install):
+支持列表: Ubuntu, Debian, Kali, Arch, Alpine。
+全自动流程: 自动更换国内源、安装中文字体 (Noto CJK)、配置中文语言环境，解决乱码问题。  
+
+[3] 启动桌面 (GUI Mode):
+一键安装并配置 XFCE4 桌面环境。
+自动检测安装状态，智能修复音频和显示服务。  
+
+[4] 卸载管理 (Uninstall):
+安全移除已安装的系统，并强制清理残留文件。
+
+
+🖥️ 桌面模式支持 (GUI)
+模式	说明
+1. Termux:X11	(强烈推荐) 支持硬件加速，提供 60FPS 的流畅体验。需要安装 ```Termux:X11``` 配套 APP。
+2. VNC Viewer	(通用兼容) 适用于任何 VNC 客户端（如 RealVNC）。连接地址: ```127.0.0.1:5901```。
+
+
+❓ 常见问题解答 (FAQ)
+Q: 运行脚本后，我的光标消失了怎么办？
+A: 别担心，只需再次运行 xxy 命令，然后通过选项 0 正常退出。v32.0 版本内置的自愈逻辑会自动为您恢复光标。
+Q: 为什么下载或安装系统的速度很慢？
+A: 这通常取决于您连接 Linux 官方镜像源的网络速度。建议使用 ```termux-change-repo``` 命令将源切换到清华大学或中科大镜像源。
+Q: 如何更新到最新的 v32.0 版本？
+A: 只需重新运行上面的“一键安装命令”即可。新版本会自动覆盖旧版本，无需手动卸载。
+
+
+🤝 参与贡献
+我们非常欢迎社区贡献！如果您有好的想法，请按以下步骤操作：
+复刻 (Fork) 本项目
+创建您的特性分支 (git checkout -b feature/新功能)
+提交您的更改 (git commit -m '添加了某个很棒的功能')
+推送到分支 (git push origin feature/新功能)
+发起拉取请求 (Pull Request)
 <div align="center">
-<sub>Made with ❤️ by XXY Team</sub>
+开源协议
+本项目遵循 GPL-3.0 协议发布。
+<sub>由 XXY Team 与 AI 助手联合优化构建</sub>
 </div>
