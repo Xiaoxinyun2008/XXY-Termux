@@ -12,6 +12,7 @@ export HOME="/data/data/com.termux/files/home"
 export DISTRO_NAME="debian"
 export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
 export TMP_WORKER="$PREFIX/tmp/worker_script.sh"
+export TMP_DIR="$PREFIX/tmp/"
 export LOG_DIR="$HOME/.xxy/logs"
 export LOG_FILE="$LOG_DIR/xxy_$(date +%Y%m%d).log"
 export CONFIG_DIR="$HOME/.xxy"
@@ -59,6 +60,7 @@ load_config() {
         cat > "$CONFIG_FILE" << 'CONFIG_EOF'
 # XXY 配置文件
 MIRROR_SOURCE="tuna"  # 可选: tuna, ustc, aliyun
+TERMUX_X11_LEGACY="false" # 旧手机的 Termux X11 支持
 AUTO_UPDATE_CHECK="true"  # 自动检查更新
 LOG_RETENTION_DAYS="7"  # 日志保留天数
 BACKUP_COMPRESSION="true"  # 备份时是否压缩
@@ -91,35 +93,61 @@ check_update() {
     fi
 }
 
-# ==============================================================================
-# 🛠️ 核心模块：容器内部构建脚本 (Worker)
-# ==============================================================================
-create_worker_script() {
-    mkdir -p "$PREFIX/tmp"
-    cat > "$TMP_WORKER" << 'EOF'
+# ==============
+# Rootfs scripts
+# ==============
+create_rootfs_script(){
+   # MIRRORS Change...
+   # mirrors.tuna
+   if [ "$MIRROR_SOURCE" == "tuna" ];then
+   cat > "$TMP_DIR/mirrors" << EOF
+echo " >>> [内部] 根据配置，选择了 tuna"
+cat > /etc/apt/sources.list << SOURCES
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ trixie main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ trixie-updates main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian-security trixie-security main contrib non-free non-free-firmware
+SOURCES
+EOF
+   fi
+   # mirrors.utsc
+   if [ "$MIRROR_SOURCE" == "ustc" ];then
+   cat > "$TMP_DIR/mirrors" << EOF
+echo " >>> [内部] 根据配置，选择了 utsc"
+cat > /etc/apt/sources.list << SOURCES
+deb https://mirrors.utsc.edu.cn/debian/ trixie main contrib non-free non-free-firmware
+deb https://mirrors.utsc.edu.cn/debian/ trixie-updates main contrib non-free non-free-firmware
+deb https://mirrors.utsc.edu.cn/debian-security trixie-security main contrib non-free non-free-firmware
+SOURCES
+EOF
+   fi
+   # All in One
+   cat > "$TMP_WORKER" << EOF
 #!/bin/bash
 set -e
 
-# [1] 换源 (清华源 Debian Bookworm)
-echo ">>> [内部] 正在配置国内源..."
-cat > /etc/apt/sources.list << SOURCES
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware
-SOURCES
+# [1] 切换国内源
+$(cat $TMP_DIR/mirrors)
 
 # [2] 更新并安装基础软件
-echo ">>> [内部] 正在安装桌面和生产力工具 (耗时较长)..."
+echo ">>> [内部] 正在安装桌面 (耗时较长)..."
 apt update -y
 export DEBIAN_FRONTEND=noninteractive
 
-# 安装核心组件：桌面(XFCE)、浏览器(Firefox)、字体(Noto)、输入法(Fcitx5)、开发工具(Git/Python)
-apt install -y sudo nano wget curl git build-essential python3-full \
-    xfce4 xfce4-goodies xfce4-terminal dbus-x11 \
+# 安装组件
+apt install -y sudo nano wget curl git \
+    xfce4 xfce4-terminal dbus-x11
+
+# 询问
+case \$(read -p " >>> 是否需要安装初始组件？(xfce4 软件扩展包, python3 开发, firefox 浏览器, fcitx5 输入法) [y/n, 默认y]") in
+  "n"|"no") : ;;
+  "y"|"yes"|*)
+    apt install -y xfce4-goodies build-essential python3-full \
     firefox-esr \
     fonts-noto-cjk fonts-noto-color-emoji \
     fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
     im-config
+  ;;
+esac
 
 # [3] 中文环境配置
 echo ">>> [内部] 生成中文 Locale..."
@@ -152,6 +180,14 @@ sed -i 's/Exec=firefox-esr %u/Exec=firefox-esr --no-remote %u/g' /usr/share/appl
 apt autoremove -y; apt clean
 echo ">>> [内部] 环境构建完成！"
 EOF
+}
+
+# ==============================================================================
+# 🛠️ 核心模块：容器内部构建脚本 (Worker)
+# ==============================================================================
+create_worker_script() {
+    mkdir -p "$PREFIX/tmp"
+    create_rootfs_script # 转到上面的脚本构建
     chmod +x "$TMP_WORKER"
 }
 
@@ -224,7 +260,7 @@ auto_fix_shizuku() {
 # --- 安装系统 ---
 install_system() {
     clear
-    log "=== 安装 Debian 生产力系统 ==="
+    log "=== 安装 Debian Trixie ==="
     # 检查依赖
     pkg install proot-distro pulseaudio termux-x11-nightly virglrenderer-android android-tools -y -o Dpkg::Options::="--force-confnew"
 
@@ -411,17 +447,28 @@ restore_system() {
     read -n 1 -s -r -p "按任意键返回..."
 }
 
+# 只进入bash
+start_rootfs() {
+    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
+    proot-distro login "$DISTRO_NAME" --shared-tmp
+}
+
 # --- 启动桌面 ---
 start_desktop() {
     if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
     clear
-    log "🚀 正在启动生产力桌面..."
+    log "🚀 正在启动桌面..."
     
     # 清理 & 启动服务
     killall -9 termux-x11 Xwayland pulseaudio virgl_test_server_android >/dev/null 2>&1
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
     
-    termux-x11 :0 -ac &
+    # tx11 
+    case "$TERMUX_X11_LEGACY" in
+      "true") tx11_legacyt="-legacy-drawer" ;;
+      "false"|*) tx11_legacy="" ;;
+    esac
+    termux-x11 :0 -ac ${tx11_legacy} &
     
     # 等待 X11 准备就绪
     local count=0
@@ -474,7 +521,7 @@ menu_maintenance() {
     while true; do
         clear
         echo -e "${B}┌── [维护工具] ──────────────┐${NC}"
-        echo -e "1. ${Y}Shizuku 防闪退修复${NC} (全自动)"
+        echo -e "1. ${Y}Termux 防 Signal9 被杀后台${NC} (全自动)"
         echo -e "2. 清理下载缓存 (修复安装失败)"
         echo -e "3. ${G}备份系统${NC} (完整打包)"
         echo -e "4. ${C}恢复系统${NC} (从备份恢复)"
@@ -558,16 +605,18 @@ main_menu() {
         echo -e "当前状态: $(if [ -d "$ROOTFS" ]; then echo "${G}Debian 已就绪${NC}"; else echo "${R}未安装系统${NC}"; fi)"
         echo ""
         echo -e "1. ${G}🚀 启动桌面环境${NC} (日常使用点这个)"
-        echo -e "2. 💿 安装/管理系统 (二级菜单)"
-        echo -e "3. 🛠️ 维护/防闪退修复 (二级菜单)"
+        echo -e "2. ${Y}[  ] 进入容器内置 Bash${NC} (专业/熟练人用)"
+        echo -e "2. 💿 安装/管理系统"
+        echo -e "3. 🛠️ 维护/防闪退修复"
         echo -e "0. ❌ 退出"
         echo ""
         read -p "👉 请输入序号: " main_opt
         
         case "$main_opt" in
             1) start_desktop ;;
-            2) menu_install ;;
-            3) menu_maintenance ;;
+            2) start_rootfs ;;
+            3) menu_install ;;
+            4) menu_maintenance ;;
             0) exit 0 ;;
             *) ;;
         esac
