@@ -448,6 +448,10 @@ restore_system() {
 }
 
 # 只进入bash
+start_rootfs() {
+    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
+    proot-distro login "$DISTRO_NAME" --shared-tmp
+}
 
 # --- 启动桌面 ---
 start_desktop() {
@@ -601,16 +605,18 @@ main_menu() {
         echo -e "当前状态: $(if [ -d "$ROOTFS" ]; then echo "${G}Debian 已就绪${NC}"; else echo "${R}未安装系统${NC}"; fi)"
         echo ""
         echo -e "1. ${G}🚀 启动桌面环境${NC} (日常使用点这个)"
-        echo -e "2. 💿 安装/管理系统 (二级菜单)"
-        echo -e "3. 🛠️ 维护/防闪退修复 (二级菜单)"
+        echo -e "2. ${Y}[  ] 进入容器内置 Bash${NC} (专业/熟练人用)"
+        echo -e "2. 💿 安装/管理系统"
+        echo -e "3. 🛠️ 维护/防闪退修复"
         echo -e "0. ❌ 退出"
         echo ""
         read -p "👉 请输入序号: " main_opt
         
         case "$main_opt" in
             1) start_desktop ;;
-            2) menu_install ;;
-            3) menu_maintenance ;;
+            2) start_rootfs ;;
+            3) menu_install ;;
+            4) menu_maintenance ;;
             0) exit 0 ;;
             *) ;;
         esac
