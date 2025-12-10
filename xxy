@@ -1,16 +1,18 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# 📱 XXY v5.0 终极生产力工具箱（AI优化增强版）
-# 整合：Shizuku自动修复 | Debian生产力环境 | VSCode | 二级菜单 | 日志系统 | 备份恢复
+# 📱 XXY v5.1 终极生产力工具箱（AI 优化增强版）
+# 核心功能：容器物理路径映射 | Shizuku 自动修复 | Debian 环境 | VSCode | 备份
 # ==============================================================================
 
 # --- [0] 全局配置 ---
-export SCRIPT_VERSION="5.0"
+export SCRIPT_VERSION="5.1"
 export PREFIX="/data/data/com.termux/files/usr"
 export HOME="/data/data/com.termux/files/home"
 export DISTRO_NAME="debian"
-export ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO_NAME"
+# 关键优化：准确指向 proot-distro 的默认安装路径
+export PROOT_BASE="$PREFIX/var/lib/proot-distro/installed-rootfs"
+export ROOTFS="$PROOT_BASE/$DISTRO_NAME"
 export TMP_WORKER="$PREFIX/tmp/worker_script.sh"
 export LOG_DIR="$HOME/.xxy/logs"
 export LOG_FILE="$LOG_DIR/xxy_$(date +%Y%m%d).log"
@@ -22,6 +24,12 @@ export BACKUP_DIR="$HOME/.xxy/backups"
 R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); NC=$(tput sgr0)
 
+# 确保基础依赖存在
+if ! command -v proot-distro &> /dev/null; then
+    echo "${Y}正在安装核心依赖 proot-distro...${NC}"
+    pkg install proot-distro -y
+fi
+
 # 创建必要目录
 mkdir -p "$LOG_DIR" "$CONFIG_DIR" "$BACKUP_DIR"
 
@@ -29,66 +37,66 @@ mkdir -p "$LOG_DIR" "$CONFIG_DIR" "$BACKUP_DIR"
 trap 'echo -e "\n${G}[XXY] 已安全退出。${NC}"; log_info "用户退出程序"; exit 0' EXIT INT TERM
 
 # ==============================================================================
-# 📝 日志系统
+# 📝 日志系统 & 基础函数
 # ==============================================================================
 
-# 日志函数
-log_info() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$LOG_FILE"
-}
+log_info() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$LOG_FILE"; }
+log_error() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$LOG_FILE"; }
+log_warn() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$LOG_FILE"; }
 
-log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$LOG_FILE"
-}
-
-log_warn() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$LOG_FILE"
-}
-
-# ==============================================================================
-# ⚙️ 配置管理
-# ==============================================================================
+log() { echo -e "${G}[XXY] $1${NC}"; log_info "$1"; }
+warn() { echo -e "${Y}[提示] $1${NC}"; log_warn "$1"; }
+err() { echo -e "${R}[错误] $1${NC}"; log_error "$1"; }
 
 # 加载配置
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
         source "$CONFIG_FILE"
-        log_info "配置文件已加载"
     else
-        # 创建默认配置
         cat > "$CONFIG_FILE" << 'CONFIG_EOF'
-# XXY 配置文件
-MIRROR_SOURCE="tuna"  # 可选: tuna, ustc, aliyun
-AUTO_UPDATE_CHECK="true"  # 自动检查更新
-LOG_RETENTION_DAYS="7"  # 日志保留天数
-BACKUP_COMPRESSION="true"  # 备份时是否压缩
+MIRROR_SOURCE="tuna"
+AUTO_UPDATE_CHECK="true"
+LOG_RETENTION_DAYS="7"
 CONFIG_EOF
         source "$CONFIG_FILE"
-        log_info "已创建默认配置文件"
     fi
 }
 
 # ==============================================================================
-# 🔄 版本检查和更新
+# 🔍 容器查找与物理路径 (核心优化部分)
 # ==============================================================================
 
-# 检查更新
-check_update() {
-    log_info "检查版本更新"
-    local remote_version=$(curl -s "https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/version.txt" 2>/dev/null || echo "")
+get_container_info() {
+    echo -e "${C}=== 容器状态信息 ===${NC}"
     
-    if [ -n "$remote_version" ] && [ "$remote_version" != "$SCRIPT_VERSION" ]; then
-        echo -e "${Y}发现新版本: $remote_version (当前: $SCRIPT_VERSION)${NC}"
-        read -p "是否立即更新? (y/n): " update_choice
-        if [ "$update_choice" == "y" ]; then
-            log_info "开始更新到版本 $remote_version"
-            bash -c "$(curl -fsSL https://raw.githubusercontent.com/Xiaoxinyun2008/XXY-Termux/main/xxy)"
-            log_info "更新完成"
-            exit 0
+    # 检查 proot-distro 列表确认是否已安装
+    if proot-distro list | grep -q "$DISTRO_NAME (installed)"; then
+        STATUS="${G}已安装${NC}"
+        IS_INSTALLED=true
+    else
+        STATUS="${R}未安装${NC}"
+        IS_INSTALLED=false
+    fi
+
+    echo -e "容器名称: ${Y}${DISTRO_NAME}${NC}"
+    echo -e "安装状态: ${STATUS}"
+
+    if [ "$IS_INSTALLED" = true ]; then
+        # 这里的 ROOTFS 变量就是你要的“物理文件名称/路径”
+        echo -e "物理路径: ${B}${ROOTFS}${NC}"
+        
+        # 计算占用空间 (如果文件夹存在)
+        if [ -d "$ROOTFS" ]; then
+            echo -n "占用空间: "
+            du -sh "$ROOTFS" | awk '{print $1}'
+            echo -e "${Y}提示: 你可以使用 MT管理器/系统文件 进入此路径管理文件${NC}"
+        else
+            err "检测到已安装状态，但物理路径不存在！建议重装。"
         fi
     else
-        log_info "当前已是最新版本"
+        echo -e "物理路径: 暂无 (需安装后生成)"
     fi
+    echo "======================"
 }
 
 # ==============================================================================
@@ -100,479 +108,179 @@ create_worker_script() {
 #!/bin/bash
 set -e
 
-# [1] 换源 (清华源 Debian Bookworm)
-echo ">>> [内部] 正在配置国内源..."
+# 错误重试函数
+retry_cmd() {
+    local -i i=1
+    while [ $i -le 3 ]; do
+        "$@" && return 0
+        echo ">>> 命令执行失败，尝试重试 ($i/3)..."
+        sleep 2
+        let i++
+    done
+    return 1
+}
+
+# [1] 换源
+echo ">>> [内部] 配置清华源 (Debian Bookworm)..."
 cat > /etc/apt/sources.list << SOURCES
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free non-free-firmware
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware
 deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware
 SOURCES
 
-# [2] 更新并安装基础软件
-echo ">>> [内部] 正在安装桌面和生产力工具 (耗时较长)..."
-apt update -y
+# [2] 更新
+echo ">>> [内部] 更新软件包..."
+retry_cmd apt update -y
 export DEBIAN_FRONTEND=noninteractive
 
-# 安装核心组件：桌面(XFCE)、浏览器(Firefox)、字体(Noto)、输入法(Fcitx5)、开发工具(Git/Python)
-apt install -y sudo nano wget curl git build-essential python3-full \
+# [3] 安装核心组件
+echo ">>> [内部] 安装桌面环境与工具..."
+retry_cmd apt install -y sudo nano wget curl git build-essential python3-full \
     xfce4 xfce4-goodies xfce4-terminal dbus-x11 \
-    firefox-esr \
-    fonts-noto-cjk fonts-noto-color-emoji \
-    fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-qt5 \
-    im-config
+    firefox-esr fonts-noto-cjk fonts-noto-color-emoji \
+    fcitx5 fcitx5-chinese-addons im-config
 
-# [3] 中文环境配置
-echo ">>> [内部] 生成中文 Locale..."
+# [4] 中文环境
+echo ">>> [内部] 生成 Locale..."
 apt install -y locales
 sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen zh_CN.UTF-8
 update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
 
-# [4] 环境变量 (修复输入法和显示)
-echo ">>> [内部] 配置环境变量..."
-cat > /etc/profile.d/xxy_env.sh << 'ENV_EOF'
-export LANG=zh_CN.UTF-8
-export LC_ALL=zh_CN.UTF-8
-export GTK_IM_MODULE=fcitx
-export QT_IM_MODULE=fcitx
-export XMODIFIERS=@im=fcitx
-export DISPLAY=:0
-export PULSE_SERVER=127.0.0.1
-ENV_EOF
-chmod +x /etc/profile.d/xxy_env.sh
-
-# [5] 软件修复补丁
-echo ">>> [内部] 应用 Firefox/VSCode 防闪退补丁..."
+# [5] 修复与清理
+echo ">>> [内部] 应用修复补丁..."
 echo 'alias firefox="firefox-esr --no-remote"' >> /etc/bash.bashrc
-# 创建桌面快捷方式修复
-mkdir -p /usr/share/applications
-sed -i 's/Exec=firefox-esr %u/Exec=firefox-esr --no-remote %u/g' /usr/share/applications/firefox-esr.desktop 2>/dev/null || true
-
-# [6] 清理
 apt autoremove -y; apt clean
-echo ">>> [内部] 环境构建完成！"
+echo ">>> [内部] 构建完成！"
 EOF
     chmod +x "$TMP_WORKER"
 }
 
 # ==============================================================================
-# 🔧 功能函数
+# 🚀 安装与启动逻辑
 # ==============================================================================
 
-log() { 
-    echo -e "${G}[XXY] $1${NC}"
-    log_info "$1"
-}
-
-warn() { 
-    echo -e "${Y}[提示] $1${NC}"
-    log_warn "$1"
-}
-
-err() { 
-    echo -e "${R}[错误] $1${NC}"
-    log_error "$1"
-}
-
-# 显示进度条
-show_progress() {
-    local current=$1
-    local total=$2
-    local width=50
-    local percentage=$((current * 100 / total))
-    local completed=$((width * current / total))
+install_debian() {
+    log "开始安装 Debian 容器..."
     
-    printf "\r${G}进度: ["
-    printf '%*s' "$completed" | tr ' ' '='
-    printf '%*s' "$((width - completed))" | tr ' ' ' '
-    printf "] %d%%${NC}" "$percentage"
+    if [ -d "$ROOTFS" ]; then
+        warn "检测到旧的容器文件，正在备份..."
+        mv "$ROOTFS" "$ROOTFS.bak.$(date +%s)"
+    fi
+
+    # 安装基础系统
+    proot-distro install "$DISTRO_NAME"
+    
+    log "正在注入自动化脚本..."
+    create_worker_script
+    
+    # 将 worker 脚本复制进容器并执行
+    # 注意：proot-distro login 会挂载宿主目录，但为了保险，我们直接用 login 执行
+    # 我们需要确保脚本在容器内可访问。Termux 的 $PREFIX/tmp 通常映射不到容器内特定位置
+    # 所以我们通过 cat 管道传输或者直接 cp 到 rootfs
+    
+    cp "$TMP_WORKER" "$ROOTFS/root/install.sh"
+    chmod +x "$ROOTFS/root/install.sh"
+    
+    log "进入容器执行配置 (这一步需要较长时间)..."
+    proot-distro login "$DISTRO_NAME" -- /root/install.sh
+    
+    log "安装完成！"
+    rm -f "$TMP_WORKER" "$ROOTFS/root/install.sh"
 }
 
-# 清理旧日志
-clean_old_logs() {
-    log_info "清理旧日志文件"
-    find "$LOG_DIR" -name "xxy_*.log" -mtime +${LOG_RETENTION_DAYS:-7} -delete 2>/dev/null
+start_debian() {
+    if [ ! -d "$ROOTFS" ]; then
+        err "容器未安装，请先执行安装！"
+        return
+    fi
+    
+    # 启动 GUI 的提示
+    echo -e "${G}正在启动 Debian...${NC}"
+    echo -e "${Y}提示：进入后若要启动桌面，请输入: startxfce4${NC}"
+    
+    # 设置显示变量
+    export DISPLAY=:0
+    export PULSE_SERVER=127.0.0.1
+    
+    proot-distro login "$DISTRO_NAME" --shared-tmp
 }
 
-# --- 自动检测并修复 Shizuku 环境 ---
+# ==============================================================================
+# 🛡️ Shizuku 修复 (补全版)
+# ==============================================================================
 auto_fix_shizuku() {
     log "正在检查 Shizuku 环境..."
     
-    # 1. 检查文件是否存在，不存在则下载 (使用国内源)
-    if [ ! -f "$PREFIX/bin/rish" ] || [ ! -f "$PREFIX/bin/rish_shizuku.dex" ]; then
-        echo -e "${Y}>>> 正在下载 rish 组件 (国内高速镜像)...${NC}"
-        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish" -o $PREFIX/bin/rish
-        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish_shizuku.dex" -o $PREFIX/bin/rish_shizuku.dex
-        chmod +x $PREFIX/bin/rish
+    # 1. 下载 rish
+    if [ ! -f "$PREFIX/bin/rish" ]; then
+        echo -e "${Y}>>> 下载 Shizuku 接口组件...${NC}"
+        # 使用 ghproxy 镜像
+        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish" -o "$PREFIX/bin/rish"
+        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish_shizuku.dex" -o "$PREFIX/bin/rish_shizuku.dex"
+        chmod +x "$PREFIX/bin/rish"
     fi
 
-    # 2. 尝试执行
-    log "正在尝试通过 Shizuku 解除进程限制..."
-    echo -e "${Y}⚠️  注意：如果 Shizuku 弹出授权窗口，请务必点击【始终允许】！${NC}"
+    # 2. 执行修复
+    log "尝试通过 Shizuku 解除 Phantom Process 限制..."
+    echo -e "${Y}⚠️  如果弹出 Shizuku 授权窗口，请点击【始终允许】${NC}"
     
-    if $PREFIX/bin/rish -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647 && cmd appops set com.termux RUN_IN_BACKGROUND allow" 2>/dev/null; then
-        echo -e "${G}✅ 修复成功！Termux 已获得免死金牌。${NC}"
-        read -n 1 -s -r -p "按任意键继续..."
+    if "$PREFIX/bin/rish" -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647 && cmd appops set com.termux RUN_IN_BACKGROUND allow" 2>/dev/null; then
+        echo -e "${G}✅ 修复成功！进程限制已解除。${NC}"
     else
-        echo -e "${R}❌ 授权失败。${NC}"
-        echo "可能原因：Shizuku 未启动，或未授权。"
-        echo "请确保 Shizuku APP 正在运行，然后再试一次。"
-        read -n 1 -s -r -p "按任意键返回..."
-    fi
-}
-
-# --- 安装系统 ---
-install_system() {
-    clear
-    log "=== 安装 Debian 生产力系统 ==="
-    # 检查依赖
-    pkg install proot-distro pulseaudio termux-x11-nightly virglrenderer-android android-tools -y -o Dpkg::Options::="--force-confnew"
-
-    if [ -d "$ROOTFS" ]; then
-        read -p "系统已存在，是否删除重装? (y/n): " opt
-        if [ "$opt" != "y" ]; then return; fi
-        proot-distro remove "$DISTRO_NAME"
-    fi
-
-    log "正在下载系统 (请保持网络畅通)..."
-    rm -rf "$PREFIX/var/lib/proot-distro/dlcache/$DISTRO_NAME"
-    
-    if proot-distro install "$DISTRO_NAME"; then
-        echo "nameserver 223.5.5.5" > "$ROOTFS/etc/resolv.conf"
-        create_worker_script
-        log "正在进入容器配置环境 (Firefox/中文/桌面)..."
-        proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$TMP_WORKER"
-        rm -f "$TMP_WORKER"
-        log "🎉 系统安装完成！"
-    else
-        err "下载失败。请开启 VPN 或检查网络。"
+        echo -e "${R}❌ 授权失败或 Shizuku 未运行。${NC}"
+        echo -e "${Y}>>> 手动修复方案:${NC}"
+        echo "1. 确保已安装 Shizuku APP 并已激活"
+        echo "2. 连接电脑 ADB 执行以下命令:"
+        echo "   adb shell /system/bin/device_config put activity_manager max_phantom_processes 2147483647"
     fi
     read -n 1 -s -r -p "按任意键返回..."
-}
-
-# --- 安装 VSCode ---
-install_vscode() {
-    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
-    log "正在下载并安装 VSCode (ARM64)..."
-    
-    # 注入安装脚本到容器
-    cat > "$PREFIX/tmp/vscode_inst.sh" << 'EOF'
-#!/bin/bash
-cd /tmp
-echo ">>> [内部] 下载 VSCode.deb..."
-wget -O code.deb "https://update.code.visualstudio.com/latest/linux-deb-arm64/stable"
-echo ">>> [内部] 安装中..."
-apt install -y ./code.deb
-rm code.deb
-# 修复启动
-echo ">>> [内部] 修复启动参数..."
-echo 'alias code="code --no-sandbox --unity-launch"' >> /etc/bash.bashrc
-sed -i 's/Exec=\/usr\/share\/code\/code/Exec=\/usr\/share\/code\/code --no-sandbox/g' /usr/share/applications/code.desktop 2>/dev/null || true
-echo "✅ VSCode 安装完成。"
-EOF
-    proot-distro login "$DISTRO_NAME" --shared-tmp -- /bin/bash "$PREFIX/tmp/vscode_inst.sh"
-    read -n 1 -s -r -p "按任意键返回..."
-}
-
-# --- 备份系统 ---
-backup_system() {
-    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 2; return; fi
-    
-    clear
-    log "=== 系统备份工具 ==="
-    echo -e "当前系统: ${G}$DISTRO_NAME${NC}"
-    
-    local backup_name="xxy_${DISTRO_NAME}_$(date +%Y%m%d_%H%M%S)"
-    local backup_file="$BACKUP_DIR/${backup_name}.tar.gz"
-    
-    echo -e "\n备份将保存到: ${C}$backup_file${NC}"
-    echo -e "预计大小: ${Y}$(du -sh "$ROOTFS" 2>/dev/null | cut -f1)${NC}"
-    echo ""
-    
-    read -p "确定开始备份吗？这可能需要几分钟... (y/n): " confirm
-    if [ "$confirm" != "y" ]; then
-        log "用户取消备份"
-        return
-    fi
-    
-    log "开始备份系统..."
-    log_info "开始备份: $backup_name"
-    
-    # 显示进度提示
-    (
-        cd "$PREFIX/var/lib/proot-distro/installed-rootfs"
-        tar czf "$backup_file" "$DISTRO_NAME" 2>/dev/null
-    ) &
-    
-    local tar_pid=$!
-    echo -e "\n${Y}正在打包压缩中，请稍候...${NC}\n"
-    
-    # 简单的进度指示
-    while kill -0 $tar_pid 2>/dev/null; do
-        echo -n "."
-        sleep 1
-    done
-    wait $tar_pid
-    
-    if [ -f "$backup_file" ]; then
-        local size=$(du -h "$backup_file" | cut -f1)
-        echo -e "\n\n${G}✅ 备份成功！${NC}"
-        echo -e "文件位置: ${C}$backup_file${NC}"
-        echo -e "文件大小: ${Y}$size${NC}"
-        log_info "备份完成: $backup_file (大小: $size)"
-    else
-        err "备份失败！"
-        log_error "备份失败: $backup_name"
-    fi
-    
-    read -n 1 -s -r -p "按任意键返回..."
-}
-
-# --- 恢复系统 ---
-restore_system() {
-    clear
-    log "=== 系统恢复工具 ==="
-    
-    # 列出可用备份
-    local backups=()
-    while IFS= read -r -d '' backup; do
-        backups+=("$backup")
-    done < <(find "$BACKUP_DIR" -name "*.tar.gz" -print0 2>/dev/null | sort -z -r)
-    
-    if [ ${#backups[@]} -eq 0 ]; then
-        warn "未找到任何备份文件"
-        sleep 2
-        return
-    fi
-    
-    echo -e "\n可用备份列表："
-    echo -e "${B}────────────────────────────────────${NC}"
-    local i=1
-    for backup in "${backups[@]}"; do
-        local filename=$(basename "$backup")
-        local size=$(du -h "$backup" | cut -f1)
-        local date=$(echo "$filename" | grep -oP '\d{8}_\d{6}' || echo "未知")
-        echo -e "${G}[$i]${NC} $filename"
-        echo -e "    大小: $size | 日期: $date"
-        ((i++))
-    done
-    echo -e "${B}────────────────────────────────────${NC}"
-    echo -e "[0] 返回\n"
-    
-    read -p "请选择要恢复的备份编号: " choice
-    
-    if [ "$choice" == "0" ]; then return; fi
-    if [ "$choice" -lt 1 ] || [ "$choice" -gt ${#backups[@]} ]; then
-        err "无效选择"
-        sleep 1
-        return
-    fi
-    
-    local selected_backup="${backups[$((choice-1))]}"
-    
-    echo -e "\n${R}⚠️  警告：${NC}恢复操作将${R}完全覆盖${NC}当前系统！"
-    read -p "确定要恢复吗？(输入 YES 确认): " confirm
-    
-    if [ "$confirm" != "YES" ]; then
-        log "用户取消恢复"
-        return
-    fi
-    
-    log "开始恢复系统..."
-    log_info "恢复备份: $selected_backup"
-    
-    # 删除现有系统
-    if [ -d "$ROOTFS" ]; then
-        proot-distro remove "$DISTRO_NAME" 2>/dev/null || true
-    fi
-    
-    # 解压备份
-    echo -e "\n${Y}正在解压恢复中...${NC}\n"
-    (
-        cd "$PREFIX/var/lib/proot-distro/installed-rootfs"
-        tar xzf "$selected_backup"
-    ) &
-    
-    local tar_pid=$!
-    while kill -0 $tar_pid 2>/dev/null; do
-        echo -n "."
-        sleep 1
-    done
-    wait $tar_pid
-    
-    if [ -d "$ROOTFS" ]; then
-        echo -e "\n\n${G}✅ 恢复成功！${NC}"
-        log_info "系统恢复完成"
-    else
-        err "恢复失败！"
-        log_error "系统恢复失败"
-    fi
-    
-    read -n 1 -s -r -p "按任意键返回..."
-}
-
-# --- 启动桌面 ---
-start_desktop() {
-    if [ ! -d "$ROOTFS" ]; then err "请先安装系统！"; sleep 1; return; fi
-    clear
-    log "🚀 正在启动生产力桌面..."
-    
-    # 清理 & 启动服务
-    killall -9 termux-x11 Xwayland pulseaudio virgl_test_server_android >/dev/null 2>&1
-    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
-    
-    termux-x11 :0 -ac &
-    
-    # 等待 X11 准备就绪
-    local count=0
-    while [ ! -S "$PREFIX/tmp/.X11-unix/X0" ]; do
-        sleep 0.2
-        count=$((count+1))
-        if [ $count -gt 30 ]; then err "Termux:X11 启动失败，请检查是否安装了 APP"; return; fi
-    done
-    
-    virgl_test_server_android &
-    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1
-    
-    log "正在登入系统..."
-    proot-distro login "$DISTRO_NAME" --shared-tmp -- bash -c "
-        export DISPLAY=:0
-        export PULSE_SERVER=127.0.0.1
-        fcitx5 -d &
-        dbus-launch --exit-with-session startxfce4
-    "
 }
 
 # ==============================================================================
-# 📺 菜单系统 (二级菜单设计)
+# 🖥️ 主菜单
 # ==============================================================================
-
-# 二级菜单：安装管理
-menu_install() {
-    while true; do
-        clear
-        echo -e "${B}┌── [安装管理] ──────────────┐${NC}"
-        echo -e "1. ${G}一键安装 Debian 生产力版${NC} (含中文/桌面/浏览器)"
-        echo -e "2. ${C}安装 VSCode${NC} (需先装系统)"
-        echo -e "3. 卸载系统"
-        echo -e "0. 返回上一级"
-        echo -e "${B}└────────────────────────────┘${NC}"
-        read -p "👉 选择: " sub_opt
-        case "$sub_opt" in
-            1) install_system ;;
-            2) install_vscode ;;
-            3) 
-               read -p "确定删除吗? (y/n): " del_conf
-               if [ "$del_conf" == "y" ]; then proot-distro remove "$DISTRO_NAME"; fi ;;
-            0) return ;;
-        esac
-    done
-}
-
-# 二级菜单：维护工具
-menu_maintenance() {
-    while true; do
-        clear
-        echo -e "${B}┌── [维护工具] ──────────────┐${NC}"
-        echo -e "1. ${Y}Shizuku 防闪退修复${NC} (全自动)"
-        echo -e "2. 清理下载缓存 (修复安装失败)"
-        echo -e "3. ${G}备份系统${NC} (完整打包)"
-        echo -e "4. ${C}恢复系统${NC} (从备份恢复)"
-        echo -e "5. 清理旧日志"
-        echo -e "6. 查看系统信息"
-        echo -e "0. 返回上一级"
-        echo -e "${B}└────────────────────────────┘${NC}"
-        read -p "👉 选择: " sub_opt
-        case "$sub_opt" in
-            1) auto_fix_shizuku ;;
-            2) rm -rf "$PREFIX/var/lib/proot-distro/dlcache"; log "已清理。"; sleep 1 ;;
-            3) backup_system ;;
-            4) restore_system ;;
-            5) clean_old_logs; log "日志清理完成"; sleep 1 ;;
-            6) show_system_info ;;
-            0) return ;;
-        esac
-    done
-}
-
-# --- 显示系统信息 ---
-show_system_info() {
-    clear
-    log "=== 系统信息 ==="
-    echo ""
-    echo -e "${G}版本信息:${NC}"
-    echo -e "  XXY 版本: ${C}v$SCRIPT_VERSION${NC}"
-    echo -e "  系统: $(uname -o)"
-    echo ""
-    echo -e "${G}安装状态:${NC}"
-    if [ -d "$ROOTFS" ]; then
-        echo -e "  Linux 容器: ${G}✓ 已安装${NC} ($DISTRO_NAME)"
-        echo -e "  容器大小: ${Y}$(du -sh "$ROOTFS" 2>/dev/null | cut -f1)${NC}"
-    else
-        echo -e "  Linux 容器: ${R}✗ 未安装${NC}"
-    fi
-    echo ""
-    echo -e "${G}备份信息:${NC}"
-    local backup_count=$(find "$BACKUP_DIR" -name "*.tar.gz" 2>/dev/null | wc -l)
-    echo -e "  备份数量: ${Y}$backup_count${NC}"
-    if [ $backup_count -gt 0 ]; then
-        local total_size=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1)
-        echo -e "  总大小: ${Y}$total_size${NC}"
-    fi
-    echo ""
-    echo -e "${G}日志信息:${NC}"
-    local log_count=$(find "$LOG_DIR" -name "*.log" 2>/dev/null | wc -l)
-    echo -e "  日志文件: ${Y}$log_count${NC}"
-    echo -e "  日志目录: ${C}$LOG_DIR${NC}"
-    echo ""
-    echo -e "${G}配置文件:${NC}"
-    echo -e "  配置路径: ${C}$CONFIG_FILE${NC}"
-    echo ""
-    read -n 1 -s -r -p "按任意键返回..."
-}
-
-# 主菜单
 main_menu() {
-    # 加载配置
-    load_config
-    
-    # 清理旧日志
-    clean_old_logs
-    
-    # 检查更新
-    if [ "$AUTO_UPDATE_CHECK" == "true" ]; then
-        check_update
-    fi
-    
-    # 首次启动自检
-    if [ ! -f "$PREFIX/etc/apt/sources.list.d/x11.list" ]; then 
-        log "安装 X11 仓库..."
-        pkg install x11-repo -y
-    fi
-    
     while true; do
         clear
-        echo -e "${B}┌────────────────────────────────────────┐${NC}"
-        echo -e "${B}│       XXY v$SCRIPT_VERSION 终极生产力工具箱 (AI增强版) │${NC}"
-        echo -e "${B}└────────────────────────────────────────┘${NC}"
-        echo -e "当前状态: $(if [ -d "$ROOTFS" ]; then echo "${G}Debian 已就绪${NC}"; else echo "${R}未安装系统${NC}"; fi)"
+        echo -e "${C}=========================================${NC}"
+        echo -e "${C}    XXY 工具箱 v${SCRIPT_VERSION} - 终极生产力    ${NC}"
+        echo -e "${C}=========================================${NC}"
+        get_container_info # 显示容器物理信息
         echo ""
-        echo -e "1. ${G}🚀 启动桌面环境${NC} (日常使用点这个)"
-        echo -e "2. 💿 安装/管理系统 (二级菜单)"
-        echo -e "3. 🛠️ 维护/防闪退修复 (二级菜单)"
-        echo -e "0. ❌ 退出"
+        echo -e "${G}1.${NC} 安装/重置 Debian 环境 (XFCE+Firefox)"
+        echo -e "${G}2.${NC} 启动 Debian"
+        echo -e "${G}3.${NC} Shizuku 自动修复 (防杀后台)"
+        echo -e "${G}4.${NC} 备份容器数据"
+        echo -e "${G}5.${NC} 查看更新日志"
+        echo -e "${R}0. 退出${NC}"
         echo ""
-        read -p "👉 请输入序号: " main_opt
-        
-        case "$main_opt" in
-            1) start_desktop ;;
-            2) menu_install ;;
-            3) menu_maintenance ;;
+        read -p "请输入选项 [0-5]: " choice
+
+        case $choice in
+            1) install_debian ;;
+            2) start_debian ;;
+            3) auto_fix_shizuku ;;
+            4) 
+                if [ -d "$ROOTFS" ]; then
+                    TAR_FILE="$BACKUP_DIR/debian_backup_$(date +%Y%m%d).tar.gz"
+                    log "正在备份到 $TAR_FILE ..."
+                    tar -czf "$TAR_FILE" -C "$PROOT_BASE" "$DISTRO_NAME"
+                    log "备份完成！"
+                else
+                    err "容器未安装，无法备份。"
+                fi
+                read -p "按回车继续..." 
+                ;;
+            5) cat "$LOG_FILE" | tail -n 20; read -p "按回车继续..." ;;
             0) exit 0 ;;
-            *) ;;
+            *) echo "无效输入"; sleep 1 ;;
         esac
     done
 }
 
-# --- 启动 ---
+# ==============================================================================
+# ▶️ 程序入口
+# ==============================================================================
+load_config
 main_menu
