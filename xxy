@@ -25,13 +25,32 @@ R=$(tput setaf 1); G=$(tput setaf 2); Y=$(tput setaf 3)
 B=$(tput setaf 4); C=$(tput setaf 6); W=$(tput setaf 7); NC=$(tput sgr0)
 
 # 确保基础依赖存在
-if ! command -v proot-distro &> /dev/null; then
-    echo "${Y}正在安装核心依赖 proot-distro...${NC}"
-    pkg install proot-distro -y
-fi
-
-# 创建必要目录
-mkdir -p "$LOG_DIR" "$CONFIG_DIR" "$BACKUP_DIR"
+init_check() {
+    echo -e "${C}正在检查系统环境...${NC}"
+    
+    # 检查并安装基础包
+    local required_pkgs=("proot-distro" "wget" "curl" "git")
+    for pkg in "${required_pkgs[@]}"; do
+        if ! command -v "$pkg" &> /dev/null; then
+            echo -e "${Y}安装缺失依赖: $pkg${NC}"
+            pkg install "$pkg" -y || {
+                err "安装 $pkg 失败，请检查网络连接"
+                return 1
+            }
+        fi
+    done
+    
+    # 创建必要目录
+    mkdir -p "$LOG_DIR" "$CONFIG_DIR" "$BACKUP_DIR"
+    
+    # 检查存储权限
+    if [ ! -w "$HOME" ]; then
+        err "Termux 存储权限不足，请运行: termux-setup-storage"
+        return 1
+    fi
+    
+    return 0
+}
 
 # 信号捕获
 trap 'echo -e "\n${G}[XXY] 已安全退出。${NC}"; log_info "用户退出程序"; exit 0' EXIT INT TERM
@@ -70,7 +89,7 @@ get_container_info() {
     echo -e "${C}=== 容器状态信息 ===${NC}"
     
     # 检查 proot-distro 列表确认是否已安装
-    if proot-distro list | grep -q "$DISTRO_NAME (installed)"; then
+    if proot-distro list 2>/dev/null | grep -q "$DISTRO_NAME (installed)"; then
         STATUS="${G}已安装${NC}"
         IS_INSTALLED=true
     else
@@ -82,13 +101,13 @@ get_container_info() {
     echo -e "安装状态: ${STATUS}"
 
     if [ "$IS_INSTALLED" = true ]; then
-        # 这里的 ROOTFS 变量就是你要的“物理文件名称/路径”
+        # 这里的 ROOTFS 变量就是你要的"物理文件名称/路径"
         echo -e "物理路径: ${B}${ROOTFS}${NC}"
         
         # 计算占用空间 (如果文件夹存在)
         if [ -d "$ROOTFS" ]; then
             echo -n "占用空间: "
-            du -sh "$ROOTFS" | awk '{print $1}'
+            du -sh "$ROOTFS" 2>/dev/null | awk '{print $1}' || echo "无法计算"
             echo -e "${Y}提示: 你可以使用 MT管理器/系统文件 进入此路径管理文件${NC}"
         else
             err "检测到已安装状态，但物理路径不存在！建议重装。"
@@ -103,7 +122,7 @@ get_container_info() {
 # 🛠️ 核心模块：容器内部构建脚本 (Worker)
 # ==============================================================================
 create_worker_script() {
-    mkdir -p "$PREFIX/tmp"
+    mkdir -p "$(dirname "$TMP_WORKER")"
     cat > "$TMP_WORKER" << 'EOF'
 #!/bin/bash
 set -e
@@ -112,10 +131,12 @@ set -e
 retry_cmd() {
     local -i i=1
     while [ $i -le 3 ]; do
-        "$@" && return 0
+        if "$@"; then
+            return 0
+        fi
         echo ">>> 命令执行失败，尝试重试 ($i/3)..."
         sleep 2
-        let i++
+        ((i++))
     done
     return 1
 }
@@ -150,7 +171,8 @@ update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
 # [5] 修复与清理
 echo ">>> [内部] 应用修复补丁..."
 echo 'alias firefox="firefox-esr --no-remote"' >> /etc/bash.bashrc
-apt autoremove -y; apt clean
+apt autoremove -y
+apt clean
 echo ">>> [内部] 构建完成！"
 EOF
     chmod +x "$TMP_WORKER"
@@ -165,64 +187,60 @@ install_debian() {
     
     if [ -d "$ROOTFS" ]; then
         warn "检测到旧的容器文件，正在备份..."
-        mv "$ROOTFS" "$ROOTFS.bak.$(date +%s)"
+        local backup_name="$ROOTFS.bak.$(date +%s)"
+        if ! mv "$ROOTFS" "$backup_name"; then
+            err "备份失败，请检查权限"
+            return 1
+        fi
+        echo -e "${G}已备份至: $backup_name${NC}"
     fi
 
     # 安装基础系统
-    proot-distro install "$DISTRO_NAME"
+    log "正在安装基础 Debian 系统..."
+    if ! proot-distro install "$DISTRO_NAME" <<< "y" 2>&1 | tee -a "$LOG_FILE"; then
+        err "容器安装失败"
+        return 1
+    fi
     
     log "正在注入自动化脚本..."
     create_worker_script
     
-    # 将 worker 脚本复制进容器并执行
-    # 注意：proot-distro login 会挂载宿主目录，但为了保险，我们直接用 login 执行
-    # 我们需要确保脚本在容器内可访问。Termux 的 $PREFIX/tmp 通常映射不到容器内特定位置
-    # 所以我们通过 cat 管道传输或者直接 cp 到 rootfs
+    # 复制脚本到容器内
+    if [ ! -d "$ROOTFS/root" ]; then
+        err "容器根目录不存在"
+        return 1
+    fi
     
     cp "$TMP_WORKER" "$ROOTFS/root/install.sh"
     chmod +x "$ROOTFS/root/install.sh"
     
     log "进入容器执行配置 (这一步需要较长时间)..."
-    proot-distro login "$DISTRO_NAME" -- /root/install.sh
+    echo -e "${Y}预计需要10-30分钟，取决于网络速度${NC}"
+    
+    if ! proot-distro login "$DISTRO_NAME" -- /root/install.sh 2>&1 | tee -a "$LOG_FILE"; then
+        err "容器内配置失败"
+        return 1
+    fi
     
     log "安装完成！"
     rm -f "$TMP_WORKER" "$ROOTFS/root/install.sh"
+    
+    echo -e "${G}✓ Debian 容器安装完成！${NC}"
+    echo -e "${Y}使用 'xxy start' 启动容器${NC}"
+    return 0
 }
 
 start_debian() {
     if [ ! -d "$ROOTFS" ]; then
         err "容器未安装，请先执行安装！"
-        return
+        return 1
     fi
     
     # 启动 GUI 的提示
     echo -e "${G}正在启动 Debian...${NC}"
     echo -e "${Y}提示：进入后若要启动桌面，请输入: startxfce4${NC}"
+    echo -e "${C}如需退出容器，请输入: exit${NC}"
     
     # 设置显示变量
     export DISPLAY=:0
-    export PULSE_SERVER=127.0.0.1
-    
-    proot-distro login "$DISTRO_NAME" --shared-tmp
-}
-
-# ==============================================================================
-# 🛡️ Shizuku 修复 (补全版)
-# ==============================================================================
-auto_fix_shizuku() {
-    log "正在检查 Shizuku 环境..."
-    
-    # 1. 下载 rish
-    if [ ! -f "$PREFIX/bin/rish" ]; then
-        echo -e "${Y}>>> 下载 Shizuku 接口组件...${NC}"
-        # 使用 ghproxy 镜像
-        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish" -o "$PREFIX/bin/rish"
-        curl -sL "https://mirror.ghproxy.com/https://github.com/RikkaApps/Shizuku/releases/latest/download/rish_shizuku.dex" -o "$PREFIX/bin/rish_shizuku.dex"
-        chmod +x "$PREFIX/bin/rish"
-    fi
-
-    # 2. 执行修复
-    log "尝试通过 Shizuku 解除 Phantom Process 限制..."
-    echo -e "${Y}⚠️  如果弹出 Shizuku 授权窗口，请点击【始终允许】${NC}"
-    
-    if "$PREFIX/bin/rish" -c "/system/bin/device_config put activity_manager max_phantom_p
+    export PULSE_SERVER=12
